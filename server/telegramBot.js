@@ -1,4 +1,4 @@
-import {randomUUID,timingSafeEqual} from 'node:crypto';
+import {randomUUID,timingSafeEqual,createHash} from 'node:crypto';
 import {database,normalizeArticle} from './db.js';
 import {noCache} from './auth.js';
 
@@ -38,6 +38,10 @@ const HELP=[
  '/unpublish slug — تحويل لمسودة',
  '/delete slug — حذف مع تأكيد',
  '/site — معلومات المدونة',
+ '/aboutset النص — تعديل نبذة المدونة',
+ '/quotes — عرض الاقتباسات',
+ '/quoteadd النص | القائل | المصدر — إضافة اقتباس',
+ '/quotedelete رقم الاقتباس — حذف بعد تأكيد',
  '/tagline النص — تغيير وصف المدونة',
  '/help — هذه الأوامر'
 ].join('\n');
@@ -80,10 +84,27 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
      [a.slug,a.status,a.publishDate,JSON.stringify(a),old.id]);
     return a;
    };
+   const getEditorial=async()=>{
+    const r=await sql.query("SELECT data FROM blog_public_metadata WHERE id='editorial' LIMIT 1",[]);
+    if(!r.length)throw Error('بيانات المدونة غير موجودة.');
+    return r[0].data;
+   };
+   const setEditorial=async data=>sql.query("UPDATE blog_public_metadata SET data=$1::jsonb,updated_at=NOW() WHERE id='editorial'",[JSON.stringify(data)]);
    const done=async a=>reply((a.status==='published'?'✅ منشور: ':'📝 مسودة: ')+a.title+'\n'+articleLink(a.slug));
    if(cb){
     await call('answerCallbackQuery',{callback_query_id:cb.id});
     if(cb.data==='cancel'){await reply('أُلغيت العملية.');return res.status(200).json({ok:true});}
+    if(typeof cb.data==='string'&&cb.data.startsWith('qdel:')){
+     const parts=cb.data.split(':'),index=Number(parts[1]),signature=parts[2];
+     const current=await getEditorial(),quotes=[...(current.quotes||[])];
+     if(!Number.isInteger(index)||index<0||index>=quotes.length||
+        createHash('sha256').update(quotes[index].text).digest('hex').slice(0,12)!==signature){
+      await reply('تغيرت القائمة، أعد تنفيذ الأمر.');return res.status(200).json({ok:true});
+     }
+     quotes.splice(index,1);await setEditorial({...current,quotes});
+     await reply('✅ حُذف الاقتباس من المدونة.');
+     return res.status(200).json({ok:true});
+    }
     const id=typeof cb.data==='string'&&cb.data.startsWith('del:')?cb.data.slice(4):'';
     if(!id||id.length>100)return res.status(200).json({ok:true});
     const rows=await sql.query('DELETE FROM blog_articles WHERE id=$1 RETURNING slug',[id]);
@@ -131,14 +152,35 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
     if(a.id.length>55)throw Error('معرف المقالة طويل؛ احذفها من الموقع.');
     await reply('⚠️ حذف «'+a.title+'» نهائيًا؟',[[{text:'تأكيد الحذف',callback_data:'del:'+a.id},{text:'إلغاء',callback_data:'cancel'}]]);
    }else if(cmd.name==='site'){
-    const r=await sql.query("SELECT data FROM blog_public_metadata WHERE id='editorial' LIMIT 1",[]);
-    await reply('🏛 '+(r[0]?.data?.site?.name||'مدونة معتز العلقمي')+'\n'+(r[0]?.data?.site?.tagline||'')+'\n'+SITE);
+    const data=await getEditorial();
+    await reply('🏛 '+(data.site?.name||'مدونة معتز العلقمي')+'\n'+(data.site?.tagline||'')+'\n'+SITE);
+   }else if(cmd.name==='aboutset'){
+    if(!cmd.args||cmd.args.length<10||cmd.args.length>12000)throw Error('اكتب نبذة من 10 أحرف فأكثر.');
+    const current=await getEditorial();
+    await setEditorial({...current,site:{...current.site,about:cmd.args}});
+    await reply('✅ حُدّثت صفحة حول المدونة.');
+   }else if(cmd.name==='quotes'){
+    const data=await getEditorial();
+    const quotes=data.quotes||[];
+    await reply('📚 اقتباسات المدونة: '+quotes.length+'\n'+(quotes.length?quotes.slice(0,20).map((q,i)=>(i+1)+'. '+q.text.slice(0,90)+' — '+q.author).join('\n'):'لا توجد اقتباسات.'));
+   }else if(cmd.name==='quoteadd'){
+    const items=cmd.args.split('|').map(x=>x.trim());
+    if(items.length!==3||!items[0]||items[0].length>1200||items[1].length>160||items[2].length>160)
+     throw Error('الصيغة: /quoteadd نص الاقتباس | القائل | المصدر');
+    const current=await getEditorial(),quotes=current.quotes||[];
+    if(quotes.length>=40)throw Error('لا يمكن إضافة أكثر من 40 اقتباسًا.');
+    await setEditorial({...current,quotes:[...quotes,{text:items[0],author:items[1],source:items[2]}]});
+    await reply('✅ أضيف الاقتباس إلى المدونة.');
+   }else if(cmd.name==='quotedelete'){
+    const current=await getEditorial(),quotes=current.quotes||[],index=Number(cmd.args)-1;
+    if(!Number.isInteger(index)||index<0||index>=quotes.length)throw Error('اكتب رقم اقتباس موجود من /quotes.');
+    const signature=createHash('sha256').update(quotes[index].text).digest('hex').slice(0,12);
+    await reply('هل تريد حذف هذا الاقتباس؟\n'+quotes[index].text.slice(0,200),
+     [[{text:'تأكيد الحذف',callback_data:'qdel:'+index+':'+signature},{text:'إلغاء',callback_data:'cancel'}]]);
    }else if(cmd.name==='tagline'){
     if(!cmd.args||cmd.args.length>240)throw Error('اكتب عبارة لا تزيد على 240 حرفًا.');
-    const r=await sql.query("SELECT data FROM blog_public_metadata WHERE id='editorial' LIMIT 1",[]);
-    if(!r.length)throw Error('بيانات المدونة غير موجودة.');
-    const content=JSON.stringify({...r[0].data,site:{...r[0].data.site,tagline:cmd.args}});
-    await sql.query("UPDATE blog_public_metadata SET data=$1::jsonb,updated_at=NOW() WHERE id='editorial'",[content]);
+    const current=await getEditorial();
+    await setEditorial({...current,site:{...current.site,tagline:cmd.args}});
     await reply('✅ تم تحديث شعار المدونة.');
    }else await reply('أمر غير معروف. أرسل /help.');
    return res.status(200).json({ok:true});
