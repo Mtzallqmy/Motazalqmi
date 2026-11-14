@@ -7,11 +7,15 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.widget.TextView
+import android.widget.VideoView
+import android.widget.MediaController
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -263,14 +267,46 @@ private fun share(context: android.content.Context, text: String) {
    Text(library.sections.find { it.id == a.category }?.title ?: "", color = MaterialTheme.colorScheme.secondary)
    Text(a.title, Modifier.padding(vertical = 18.dp), fontFamily = Amiri, fontSize = 32.sp, lineHeight = 48.sp)
    val minutes = (a.content.split(Regex("\\s+")).size / 180).coerceAtLeast(1)
-   Text("${a.author}  ·  ${a.publishDate}  ·  $minutes دقائق قراءة", style = MaterialTheme.typography.bodyMedium)
+   Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
+    if(a.authorImage.startsWith("https://")){
+     coil.compose.AsyncImage(model=readerImageUrl(a.authorImage),contentDescription="صورة الكاتب",
+      modifier=Modifier.size(52.dp).clip(CircleShape).border(2.dp,MaterialTheme.colorScheme.secondary,CircleShape),
+      contentScale=androidx.compose.ui.layout.ContentScale.Crop)
+    }else{
+     Surface(shape=CircleShape,color=MaterialTheme.colorScheme.secondaryContainer,modifier=Modifier.size(52.dp)){
+      Box(contentAlignment=Alignment.Center){Text(a.author.take(1).ifEmpty{"ك"},style=MaterialTheme.typography.titleLarge)}
+     }
+    }
+    Column {
+     Text("بقلم",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.secondary)
+     Text(a.author.ifBlank{"كاتب المقالة"},style=MaterialTheme.typography.titleMedium)
+     Text("${a.publishDate} · $minutes دقائق قراءة",style=MaterialTheme.typography.bodySmall)
+    }
+   }
    Spacer(Modifier.height(20.dp)); Cover(a.coverImage, settings); Spacer(Modifier.height(22.dp))
    if (rendered == null) CircularProgressIndicator()
    // Render image blocks at the exact position they appear in the article.
    // The original TextView-only Markwon renderer silently omitted Markdown image bytes.
    splitMarkdownMedia(a.content).forEachIndexed { index, part ->
     key(index) {
-     if (part.imageUrl != null) {
+     if(part.videoUrl!=null){
+      Text(part.label.ifBlank{"فيديو مرفق"},style=MaterialTheme.typography.titleSmall)
+      AndroidView(factory={ctx->
+       VideoView(ctx).apply{
+        setMediaController(MediaController(ctx))
+        setVideoURI(Uri.parse(part.videoUrl))
+        setOnErrorListener{_,_,_->true}
+       }
+      },modifier=Modifier.fillMaxWidth().height(220.dp))
+      Text("اضغط تشغيل للمشاهدة؛ يلزم اتصال الإنترنت.",style=MaterialTheme.typography.labelSmall)
+      Spacer(Modifier.height(16.dp))
+     }else if(part.audioUrl!=null||part.documentUrl!=null){
+      val link=part.audioUrl?:part.documentUrl.orEmpty()
+      OutlinedButton(onClick={runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(link)))};Unit}){
+       Icon(Icons.Default.OpenInNew,null)
+       Text(part.label.ifBlank{if(part.audioUrl!=null)"استماع إلى التسجيل" else "فتح الملف المرفق"})
+      }
+     }else if (part.imageUrl != null) {
       Cover(part.imageUrl, settings)
       Spacer(Modifier.height(14.dp))
      } else if (!part.text.isNullOrBlank()) {
