@@ -17,7 +17,7 @@ React 19 + Vite 6 + Tailwind CSS 3 + React Router 7 + Firebase Auth/Firestore + 
 ## التشغيل المحلي
 
 ```bash
-npm ci
+npm install
 cp .env.example .env
 npm run dev
 ```

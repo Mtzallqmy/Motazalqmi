@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Feather, LockKeyhole, LogIn, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { isCloudConfigured } from '../lib/firebase';
 
 export function LoginPage() {
   const { login, user, isAdmin, loading, logout } = useAuth();
-  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -17,7 +16,7 @@ export function LoginPage() {
   async function submit(event) {
     event.preventDefault();
     setBusy(true); setError('');
-    try { await login(email.trim(), password); navigate('/admin', { replace: true }); }
+    try { await login(email.trim(), password); }
     catch { setError('تعذر تسجيل الدخول. تحقق من بيانات الحساب وتفعيل Firebase وصلاحية الإدارة.'); }
     finally { setBusy(false); }
   }
