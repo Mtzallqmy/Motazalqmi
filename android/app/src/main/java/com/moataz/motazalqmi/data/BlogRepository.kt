@@ -93,7 +93,11 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
   }
   val rx=Regex("""!\[[^\]]{0,300}]\(\s*<?(https://[^)\s>]+)>?(?:\s+["'][^"']*["'])?\s*\)""")
   val urls=current.flatMap { a -> listOf(a.coverImage,a.authorImage)+rx.findAll(a.content).map { it.groupValues[1] }.toList() }
-   .filter { it.startsWith("https://")&&it.length<=2048 }.distinct().take(120)
+   .filter {
+    it.startsWith("https://")&&it.length<=2048&&
+     java.net.URI(it).path.orEmpty().substringAfterLast('.').lowercase() !in
+      setOf("mp4","webm","mp3","m4a","ogg","pdf")
+   }.distinct().take(120)
   val loader=context.imageLoader
   for(url in urls){
    runCatching { loader.execute(ImageRequest.Builder(context).data(readerImageUrl(url)).size(720,480)
