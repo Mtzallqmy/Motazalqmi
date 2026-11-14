@@ -48,6 +48,9 @@ import org.junit.runner.RunWith
    remote = snapshot(listOf(article.copy(status="draft")))
    assertTrue(runCatching { repository.sync() }.isFailure)
    assertEquals("عنوان",repository.library.first().articles.single().title)
+   remote = snapshot(listOf(article.copy(title="")))
+   assertTrue(runCatching { repository.sync() }.isFailure)
+   assertEquals("عنوان",repository.library.first().articles.single().title)
   } finally { db.close() }
  }
 }

@@ -60,9 +60,13 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
  } }
  private suspend fun applySnapshot(s: Snapshot, network: Boolean) {
   require(s.articles.size <= 2000 && s.total == s.articles.size)
-  require(s.articles.all { it.id.isNotBlank() && it.slug.isNotBlank() && it.status == "published" })
+  require(s.articles.all { it.id.isNotBlank() && it.slug.isNotBlank() && it.status == "published" &&
+   it.title.isNotBlank() && it.content.isNotBlank() && it.author.length <= 500 &&
+   it.publishDate.length <= 40 && (it.coverImage.isEmpty() || it.coverImage.startsWith("https://")) &&
+   it.tags.all { tag -> tag.length <= 200 } })
   require(s.articles.map { it.id }.toSet().size == s.articles.size)
-  require(s.sections.isNotEmpty())
+  require(s.sections.isNotEmpty() && s.sections.all { it.id.isNotBlank() && it.title.isNotBlank() })
+  require(s.quotes.all { it.text.isNotBlank() && it.author.length <= 500 && it.source.length <= 500 })
   db.withTransaction {
    dao.retireAll()
    dao.putArticles(s.articles.map { ArticleEntity(it.id, gson.toJson(it)) })
