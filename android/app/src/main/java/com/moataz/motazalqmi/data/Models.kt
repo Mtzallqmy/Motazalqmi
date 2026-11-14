@@ -40,3 +40,6 @@ interface BlogDao {
 }
 @Database(entities = [ArticleEntity::class, ReaderState::class, Metadata::class], version = 1, exportSchema = true)
 abstract class BlogDatabase : RoomDatabase() { abstract fun dao(): BlogDao }
+
+fun quoteId(q: QuoteDto): String = "quote:" + java.security.MessageDigest.getInstance("SHA-256")
+ .digest(q.text.toByteArray()).joinToString("") { "%02x".format(it) }

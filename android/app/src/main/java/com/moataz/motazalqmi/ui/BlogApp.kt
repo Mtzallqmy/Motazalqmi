@@ -43,7 +43,6 @@ import java.text.DateFormat
 import java.util.Date
 
 private val tabs = listOf("home" to "الرئيسية", "search" to "البحث", "saved" to "مكتبتي", "settings" to "الإعدادات")
-private fun quoteId(q: QuoteDto) = "quote:" + java.security.MessageDigest.getInstance("SHA-256").digest(q.text.toByteArray()).joinToString("") { "%02x".format(it) }
 @Composable fun BlogApp(vm: BlogViewModel, deepSlug: String?) {
  val library by vm.library.collectAsStateWithLifecycle()
  val settings by vm.settings.collectAsStateWithLifecycle()
@@ -135,7 +134,8 @@ private fun quoteId(q: QuoteDto) = "quote:" + java.security.MessageDigest.getIns
  val context = LocalContext.current
  val cm = context.getSystemService(ConnectivityManager::class.java)
  val wifi = cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
- if (url.startsWith("https://") && (!settings.wifiImages || wifi)) AsyncImage(model = url, contentDescription = "صورة غلاف المقال", modifier = Modifier.fillMaxWidth().height(180.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+ if (url.startsWith("https://")) AsyncImage(model = coil.request.ImageRequest.Builder(context).data(url)
+  .networkCachePolicy(if (settings.wifiImages && !wifi) coil.request.CachePolicy.DISABLED else coil.request.CachePolicy.ENABLED).build(), contentDescription = "صورة غلاف المقال", modifier = Modifier.fillMaxWidth().height(180.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
 }
 @Composable private fun ArticleList(articles: List<ArticleDto>, settings: ReadingSettings, title: String, open: (String) -> Unit) {
  LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -197,15 +197,23 @@ private fun share(context: android.content.Context, text: String) {
  val state = library.states[a.id]
  val scroll = rememberScrollState(state?.offset ?: 0)
  var focus by rememberSaveable(a.id) { mutableStateOf(false) }
+ var restored by remember(a.id) { mutableStateOf(false) }
  val engine = remember { MarkdownEngine(context) }
- val rendered by produceState<android.text.Spanned?>(null, a.content) {
-  value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { engine.renderer.render(engine.renderer.parse(a.content)) }
+ var rendered by remember(a.content) { mutableStateOf<android.text.Spanned?>(null) }
+ LaunchedEffect(a.content) {
+  rendered = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { engine.renderer.render(engine.renderer.parse(a.content)) }
+ }
+ LaunchedEffect(rendered, a.id) {
+  if (rendered != null && !restored) {
+   withFrameNanos { }; withFrameNanos { }
+   scroll.scrollTo(state?.offset ?: 0); restored = true
+  }
  }
  val ink = MaterialTheme.colorScheme.onBackground.toArgb()
  val fontId = when (settings.font) { "amiri" -> R.font.amiri; "plex" -> R.font.plex; else -> R.font.naskh }
  LaunchedEffect(a.id) {
   snapshotFlow { scroll.value to scroll.maxValue }.debounce(500).collect { (offset, max) ->
-   if (max > 0 && max < Int.MAX_VALUE) vm.position(a.id, 0, offset, offset.toFloat() / max)
+   if (restored && max > 0 && max < Int.MAX_VALUE) vm.position(a.id, 0, offset, offset.toFloat() / max)
   }
  }
  Column(Modifier.fillMaxSize()) {

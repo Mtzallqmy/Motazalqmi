@@ -1,3 +1,4 @@
+import { allowBurst } from './rateLimit.js';
 import { createHash } from 'node:crypto';
 import { database, articleRow } from './db.js';
 
@@ -9,6 +10,11 @@ export function publicGet(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     res.status(405).json({apiVersion:1,error:'Method not allowed',code:'METHOD_NOT_ALLOWED'});
     return false;
+  }
+  const identity=String(req.headers?.['x-forwarded-for']||req.socket?.remoteAddress||'anonymous').split(',')[0].trim();
+  if(!allowBurst(identity)) {
+    res.setHeader('Retry-After','60');res.setHeader('Cache-Control','no-store');
+    res.status(429).json({apiVersion:1,code:'RATE_LIMITED',error:'Too many requests'});return false;
   }
   return true;
 }

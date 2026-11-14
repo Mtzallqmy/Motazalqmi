@@ -30,7 +30,9 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
   val m = metadata.associate { it.key to it.payload }
   Library(rows.mapNotNull { runCatching { gson.fromJson(it.payload, ArticleDto::class.java) }.getOrNull() }
    .sortedByDescending { it.publishDate }, states.associateBy { it.id },
-   parseList<SectionDto>(m["sections"]), parseList<QuoteDto>(m["quotes"]),
+   parseList<SectionDto>(m["sections"]),
+   (parseList<QuoteDto>(m["quotes"]) + metadata.filter { m -> m.key.startsWith("saved_quote:") && states.any { it.id == m.key.removePrefix("saved_quote:") && it.saved } }
+    .mapNotNull { runCatching { gson.fromJson(it.payload, QuoteDto::class.java) }.getOrNull() }).distinctBy { quoteId(it) },
    rows.filter { it.available }.map { it.id }.toSet(), m["synced_at"]?.toLongOrNull() ?: 0,
    m["about"] ?: "")
  }
@@ -71,6 +73,12 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
  }
  suspend fun toggleSaved(id: String) = mutex.withLock {
   val state = dao.state(id) ?: ReaderState(id)
+  if (!state.saved && id.startsWith("quote:")) {
+   val current = dao.metadata().first().find { it.key == "quotes" }?.payload
+   parseList<QuoteDto>(current).find { quoteId(it) == id }?.let {
+    dao.putMetadata(listOf(Metadata("saved_quote:$id", gson.toJson(it))))
+   }
+  }
   dao.putState(state.copy(saved = !state.saved))
  }
  suspend fun progress(id: String, block: Int, offset: Int, value: Float) = mutex.withLock {

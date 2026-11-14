@@ -30,3 +30,22 @@ curl -fsS https://motazalqmi.vercel.app/api/v1/health
 يتلقى التطبيق نصوص المقالات المنشورة كلها وفق صفحات API، ولا يستدعي Neon مباشرة. بعد نشر أو تعديل مقالة من لوحة الكاتب على الموقع، تحدث مزامنتها في فتح التطبيق أو بالنقر على «تحديث المقالات»؛ يعمل المخزون السابق دون شبكة. **ليست المزامنة الفورية عبر Push notifications**، ولا تتضمن المسودات الخاصة أو بيانات دخول المدير.
 
 | GET | `/android` | معرف التطبيق وإصداره المستهدف، ورابط بناء APK على GitHub، وحالة آخر تشغيل لـAndroid CI إذا توفرت علنًا |
+## Premium v2 additions
+
+`GET /api/v1/sync` returns a single authoritative PostgreSQL MVCC snapshot:
+
+```json
+{"apiVersion":1,"mode":"snapshot","complete":true,"authoritative":true,"revision":"sha256...","ids":["seed-1"],"total":1,"articles":[{"id":"seed-1","slug":"imru-al-qais-poetic-imagery","status":"published","title":"...","content":"...","updatedAt":"..."}],"sections":[],"quotes":[],"site":{}}
+```
+
+The example is abbreviated. Actual production results are recorded in `docs/API-VERIFICATION.json`. `since` accepts an ISO timestamp or revision hash but this implementation sends a full snapshot, not a delta. Clients may use ETag/If-None-Match (304). No timestamp cursor can by itself detect hard deletions; reconcile only against a complete authoritative response. A total of zero is authoritative when `complete:true`.
+
+The response is rejected with 503 rather than truncated above 2000 articles / 3 MiB. Never apply a 503, interrupted, malformed or incomplete snapshot as a deletion list.
+
+Additional routes: `/api/v1/search?q=...`, `/api/v1/featured`, `/api/v1/config`, `/api/v1/versions`, and `/api/v1/articles/{slug}`. Existing `/article?slug=...`, `/articles`, `/bootstrap`, `/categories`, `/quotes`, `/about`, `/android` and `/health` remain supported. Search normalizes Arabic diacritics/alef variants and matches authors/tags/section names. Pagination uses `limit` (1–100) and `offset`.
+
+Sections, quotes and site metadata are read from `blog_public_metadata` by both website and Android API. Apply `db/migrations/002_public_metadata.sql` before deploying. It is idempotent and does not modify article rows or overwrite existing editorial metadata. Existing owner-controlled article administration remains unchanged. No writer login was added to the reader.
+
+Server secrets stay in Vercel. Android connects only over HTTPS to the public API. Vercel manages response compression; ETags and CDN cache headers are set by handlers. API errors retain a string `error` for backward compatibility with additional `apiVersion`/`code` where applicable.
+
+Public handlers also apply bounded per-instance burst protection (120 requests per minute per address, 429 with Retry-After). This is not a globally coordinated quota across serverless instances. Strong distributed abuse protection should be configured at the Vercel perimeter for the actual traffic profile.
