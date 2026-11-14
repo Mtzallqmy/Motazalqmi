@@ -18,7 +18,7 @@ export default async function handler(req,res){
     return res.status(401).json({error:'البريد أو كلمة المرور غير صحيحة.'});
   }
   await sql`DELETE FROM blog_login_attempts WHERE ip_hash=${ip}`;
-  res.setHeader('Set-Cookie',sessionCookie(process.env.ADMIN_EMAIL));
+  res.setHeader('Set-Cookie',sessionCookie(process.env.ADMIN_EMAIL,req.body.remember!==false));
   return res.status(200).json({user:{email:process.env.ADMIN_EMAIL}});
  }catch(e){console.error('Auth error',e.code||e.name);return res.status(503).json({error:'تعذر الاتصال بخدمة الدخول.'});}
 }

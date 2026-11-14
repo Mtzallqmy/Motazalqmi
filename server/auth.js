@@ -3,6 +3,8 @@ const secure=process.env.NODE_ENV==='production';
 const cookieName=secure?'__Host-blog_session':'blog_session_dev';
 const secret=()=>process.env.SESSION_SECRET||'';
 const signature=value=>createHmac('sha256',secret()).update(value).digest('base64url');
+// Password rotation revokes previously issued cookies and mobile tokens.
+const credentialVersion=()=>createHmac('sha256',secret()).update(process.env.ADMIN_PASSWORD_HASH||'').digest('hex').slice(0,24);
 export const adminReady=()=>Boolean(process.env.ADMIN_EMAIL && /^[0-9a-f]{32}:[0-9a-f]{128}$/i.test(process.env.ADMIN_PASSWORD_HASH||'') && secret().length>=32);
 export function validateLogin(email,password) {
   if(!adminReady()||typeof email!=='string'||typeof password!=='string'||password.length>512)return false;
@@ -17,7 +19,7 @@ export function validateLogin(email,password) {
 export function issueMobileAdminToken(email) {
  if (!adminReady() || email !== process.env.ADMIN_EMAIL) throw new Error('Admin unavailable');
  const expiresAt=Date.now()+2*60*60*1000;
- const body=Buffer.from(JSON.stringify({aud:'motazalqmi-mobile-admin',email,exp:expiresAt,jti:randomBytes(16).toString('hex')})).toString('base64url');
+ const body=Buffer.from(JSON.stringify({aud:'motazalqmi-mobile-admin',email,exp:expiresAt,pwd:credentialVersion(),jti:randomBytes(16).toString('hex')})).toString('base64url');
  return {accessToken:body+'.'+signature(body),expiresAt};
 }
 export function getMobileAdmin(req) {
@@ -30,7 +32,7 @@ export function getMobileAdmin(req) {
  if(actual.length!==expected.length||!timingSafeEqual(actual,expected))return null;
  try{
   const d=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));
-  return d.aud==='motazalqmi-mobile-admin'&&d.email===process.env.ADMIN_EMAIL&&
+  return d.aud==='motazalqmi-mobile-admin'&&d.email===process.env.ADMIN_EMAIL&&d.pwd===credentialVersion()&&
    Number.isSafeInteger(d.exp)&&d.exp>Date.now()&&d.exp<=Date.now()+2*60*60*1000&&
    typeof d.jti==='string'&&/^[a-f0-9]{32}$/.test(d.jti)?{email:d.email}:null;
  }catch{return null}
@@ -48,12 +50,32 @@ export function getAdmin(req) {
  if(a.length!==b.length||!timingSafeEqual(a,b))return null;
  try{
   const decoded=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));
-  return decoded.email===process.env.ADMIN_EMAIL&&decoded.exp>Date.now()?{email:decoded.email}:null;
+  return decoded.email===process.env.ADMIN_EMAIL&&decoded.pwd===credentialVersion()&&decoded.exp>Date.now()?{email:decoded.email}:null;
  }catch{return null;}
 }
-export function sessionCookie(email){
- const body=Buffer.from(JSON.stringify({email,exp:Date.now()+604800000})).toString('base64url');
- return cookieName+'='+body+'.'+signature(body)+'; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800'+(secure?'; Secure':'');
+export function sessionCookie(email,remember=true){
+ const seconds=remember?30*24*60*60:12*60*60;
+ const body=Buffer.from(JSON.stringify({email,exp:Date.now()+seconds*1000,pwd:credentialVersion()})).toString('base64url');
+ return cookieName+'='+body+'.'+signature(body)+'; Path=/; HttpOnly; SameSite=Strict'+(remember?'; Max-Age='+seconds:'')+(secure?'; Secure':'');
+}
+export function issueMobileRefreshToken(email){
+ if(!adminReady() || email!==process.env.ADMIN_EMAIL)throw new Error('Admin unavailable');
+ const exp=Date.now()+30*24*60*60*1000;
+ const body=Buffer.from(JSON.stringify({aud:'motazalqmi-mobile-refresh',email,exp,pwd:credentialVersion(),jti:randomBytes(16).toString('hex')})).toString('base64url');
+ return {refreshToken:body+'.'+signature(body),refreshExpiresAt:exp};
+}
+export function validateMobileRefreshToken(token){
+ if(!adminReady()||typeof token!=='string'||token.length>2048)return null;
+ const dot=token.lastIndexOf('.');if(dot<1)return null;
+ const body=token.slice(0,dot),a=Buffer.from(token.slice(dot+1)),b=Buffer.from(signature(body));
+ if(a.length!==b.length||!timingSafeEqual(a,b))return null;
+ try{
+  const t=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));
+  if(t.aud!=='motazalqmi-mobile-refresh'||t.email!==process.env.ADMIN_EMAIL||
+   t.pwd!==credentialVersion()||!Number.isSafeInteger(t.exp)||t.exp<=Date.now()||
+   t.exp>Date.now()+30*24*60*60*1000||!/^[a-f0-9]{32}$/.test(t.jti))return null;
+  return {email:t.email,expiresAt:t.exp};
+ }catch{return null}
 }
 export const expiredCookie=()=>cookieName+'=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0'+(secure?'; Secure':'');
 export function checkOrigin(req){

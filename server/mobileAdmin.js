@@ -1,5 +1,5 @@
 // Dedicated Android API: login returns a short-lived bearer token. Browser admin remains on /api/session.
-import {adminReady,fingerprint,noCache,issueMobileAdminToken,validateLogin} from './auth.js';
+import {adminReady,fingerprint,noCache,issueMobileAdminToken,issueMobileRefreshToken,validateMobileRefreshToken,validateLogin} from './auth.js';
 import {database} from './db.js';
 export default async function handler(req,res){
  noCache(res);
@@ -7,7 +7,13 @@ export default async function handler(req,res){
  if(req.method!=='POST')return res.status(405).json({code:'METHOD_NOT_ALLOWED',error:'POST مطلوب.'});
  if(!/application\/json/i.test(req.headers?.['content-type']||''))return res.status(415).json({error:'JSON مطلوب.'});
  if(!adminReady()||!process.env.DATABASE_URL)return res.status(503).json({error:'لم تُهيأ لوحة الكاتب بعد.'});
- if(typeof req.body?.email!=='string'||typeof req.body?.password!=='string'||JSON.stringify(req.body).length>2048)return res.status(400).json({error:'بيانات غير صالحة.'});
+ if(JSON.stringify(req.body||'').length>4096)return res.status(400).json({error:'بيانات غير صالحة.'});
+ if(req.body?.grantType==='refresh'){
+  const session=validateMobileRefreshToken(req.body.refreshToken);
+  if(!session)return res.status(401).json({error:'انتهت صلاحية جلسة الكاتب؛ سجل الدخول مجددًا.'});
+  return res.status(200).json({user:{email:session.email},...issueMobileAdminToken(session.email),tokenType:'Bearer'});
+ }
+ if(typeof req.body?.email!=='string'||typeof req.body?.password!=='string')return res.status(400).json({error:'بيانات غير صالحة.'});
  try{
   const sql=database(),ip=fingerprint(req);
   const rows=await sql`SELECT attempts FROM blog_login_attempts WHERE ip_hash=${ip} AND last_attempt>NOW()-INTERVAL '15 minutes'`;
@@ -18,6 +24,6 @@ export default async function handler(req,res){
     return res.status(401).json({error:'البريد أو كلمة المرور غير صحيحة.'});
   }
   await sql`DELETE FROM blog_login_attempts WHERE ip_hash=${ip}`;
-  return res.status(200).json({user:{email:process.env.ADMIN_EMAIL},...issueMobileAdminToken(process.env.ADMIN_EMAIL),tokenType:'Bearer'});
+  return res.status(200).json({user:{email:process.env.ADMIN_EMAIL},...issueMobileAdminToken(process.env.ADMIN_EMAIL),...(req.body.remember!==false?issueMobileRefreshToken(process.env.ADMIN_EMAIL):{}),tokenType:'Bearer'});
  }catch(e){console.error('Auth error',e.code||e.name);return res.status(503).json({error:'تعذر الاتصال بخدمة الدخول.'});}
 }
