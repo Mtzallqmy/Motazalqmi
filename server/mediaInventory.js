@@ -14,6 +14,7 @@ export function imageInventory(snapshot){
  for(const a of snapshot.articles||[]){
   if(a.status!=='published')continue;
   add(a.coverImage,'cover',a.id,a.slug);
+  add(a.authorImage,'author',a.id,a.slug);
   const pattern=/!\[[^\]]{0,300}\]\(\s*<?(https:\/\/[^)\s>]+)>?(?:\s+["'][^"']*["'])?\s*\)/g;
   for(const match of String(a.content||'').matchAll(pattern))add(match[1],'article',a.id,a.slug);
  }

@@ -33,3 +33,11 @@ test('remembered browser and native tokens revoke on password change',()=>{
  assert.equal(getAdmin({headers:{cookie}}),null);
  assert.equal(validateMobileRefreshToken(refresh),null);
 });
+
+test('normalizes author portrait HTTPS for native and web readership',()=>{
+ const base={title:'نص',slug:'writer-portrait',content:'كتابة',status:'published'};
+ const photo='https://example.org/author.jpg';
+ assert.equal(normalizeArticle({...base,author:'كاتبة',authorImage:photo}).authorImage,photo);
+ assert.throws(()=>normalizeArticle({...base,authorImage:'javascript:alert(1)'}));
+ assert.equal(normalizeArticle(base).authorImage,'');
+});
