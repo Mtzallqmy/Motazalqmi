@@ -73,7 +73,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
     val id = entry.arguments?.getString("id").orEmpty()
     when (id) {
      "about" -> About(library.about)
-     "quotes" -> Quotes(library, vm::save)
+     "quotes" -> Quotes(library, settings, vm::save) { nav.navigate("article/${Uri.encode(it)}") }
      else -> ArticleList(library.articles.filter { it.id in library.available && it.category == id }, settings,
       library.sections.find { it.id == id }?.title ?: "المقالات", { nav.navigate("article/${Uri.encode(it)}") })
     }
@@ -152,10 +152,11 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
   ArticleList(results, settings, "${results.size} من النتائج", open)
  }
 }
-@Composable private fun Quotes(library: Library, save: (String) -> Unit) {
+@Composable private fun Quotes(library: Library, settings: ReadingSettings, save: (String) -> Unit, open: (String) -> Unit) {
  LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
   item { Title("اقتباسات") }; if (library.quotes.isEmpty()) item { Empty() }
   items(library.quotes, key = { quoteId(it) }) { QuoteCard(it, library.states[quoteId(it)]?.saved == true, { save(quoteId(it)) }) }
+  items(library.articles.filter { it.id in library.available && it.category == "quotes" }, key = { it.id }) { ArticleCard(it, settings, open) }
  }
 }
 @Composable private fun QuoteCard(q: QuoteDto, saved: Boolean, save: () -> Unit, interactive: Boolean = true) {

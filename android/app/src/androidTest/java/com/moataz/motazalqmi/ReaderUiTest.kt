@@ -31,6 +31,7 @@ class ReaderUiTest {
   capture("reader")
   rule.onNodeWithContentDescription("رجوع").performClick()
   rule.onNodeWithText("مكتبتي").performClick()
+  rule.waitUntil(5000) { rule.onAllNodesWithText(title).fetchSemanticsNodes().isNotEmpty() }
   rule.onNodeWithTag("saved-feed").performScrollToNode(hasText(title))
   rule.onNodeWithText(title).assertIsDisplayed()
  }
