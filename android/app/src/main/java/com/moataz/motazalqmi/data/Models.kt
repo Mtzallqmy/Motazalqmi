@@ -34,8 +34,8 @@ interface BlogDao {
  @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putArticles(rows: List<ArticleEntity>)
  @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMetadata(rows: List<Metadata>)
  @Query("UPDATE articles SET available=0") suspend fun retireAll()
- @Query("DELETE FROM articles WHERE available=0 AND id NOT IN (SELECT id FROM reader_state WHERE saved=1)") suspend fun prune()
- @Query("DELETE FROM articles WHERE id NOT IN (SELECT id FROM reader_state WHERE saved=1)") suspend fun clearUnsaved()
+ @Query("DELETE FROM articles WHERE available=0 AND id NOT IN (SELECT id FROM reader_state WHERE saved=1 OR openedAt>0)") suspend fun prune()
+ @Query("DELETE FROM articles WHERE id NOT IN (SELECT id FROM reader_state WHERE saved=1 OR openedAt>0)") suspend fun clearUnsaved()
  @Query("SELECT COUNT(*) FROM articles") suspend fun count(): Int
 }
 @Database(entities = [ArticleEntity::class, ReaderState::class, Metadata::class], version = 1, exportSchema = true)

@@ -145,7 +145,12 @@ private fun quoteId(q: QuoteDto) = "quote:" + java.security.MessageDigest.getIns
 }
 @Composable private fun Search(library: Library, settings: ReadingSettings, open: (String) -> Unit) {
  var query by rememberSaveable { mutableStateOf("") }
- val results = remember(query, library) { library.articles.filter { a -> a.id in library.available && ArabicSearch.matches(query, a.title, a.content, a.author, a.tags.joinToString(" "), library.sections.find { it.id == a.category }?.title ?: "") } }
+ val results by produceState(library.articles, query, library) {
+  kotlinx.coroutines.delay(200)
+  value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+   library.articles.filter { a -> a.id in library.available && ArabicSearch.matches(query, a.title, a.content, a.author, a.tags.joinToString(" "), library.sections.find { it.id == a.category }?.title ?: "") }
+  }
+ }
  Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
   Title("ابحث بين السطور")
   OutlinedTextField(value = query, onValueChange = { query = it.take(120) }, label = { Text("عنوان، مؤلف، كلمة أو قسم") }, leadingIcon = { Icon(Icons.Default.Search, null) }, modifier = Modifier.fillMaxWidth(), singleLine = true)

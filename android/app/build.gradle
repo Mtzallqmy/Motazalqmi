@@ -15,7 +15,6 @@ android {
   versionCode 20000
   versionName '2.0.0'
   testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-  ndk { abiFilters 'arm64-v8a' }
  }
  buildFeatures { compose true; buildConfig true }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
@@ -32,12 +31,14 @@ android {
  }
  buildTypes {
   release {
+   ndk { abiFilters 'arm64-v8a' }
    minifyEnabled true
    shrinkResources true
    proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
    signingConfig signingConfigs.findByName('production')
   }
  }
+ testOptions { unitTests.includeAndroidResources = true }
  lint { abortOnError true }
  packaging { resources.excludes += '/META-INF/{AL2.0,LGPL2.1}' }
 }
@@ -68,6 +69,9 @@ dependencies {
  implementation 'io.noties.markwon:ext-tables:4.6.2'
  implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
  testImplementation 'junit:junit:4.13.2'
+ testImplementation 'org.robolectric:robolectric:4.14.1'
+ testImplementation 'androidx.test:core:1.6.1'
+ testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
  testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0'
  androidTestImplementation 'androidx.test.ext:junit:1.2.1'
  androidTestImplementation 'androidx.test:runner:1.6.2'
