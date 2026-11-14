@@ -60,12 +60,23 @@ jobs:
           arch: x86_64
           target: default
           disable-animations: true
-          script: gradle -p android :app:connectedDebugAndroidTest --no-daemon
+          script: |
+            gradle -p android :app:connectedDebugAndroidTest --no-daemon
+            mkdir -p android/screenshots
+            adb shell am start -W -n com.moataz.motazalqmi/.MainActivity
+            adb shell wm dismiss-keyguard
+            sleep 5
+            adb exec-out screencap -p > android/screenshots/home.png
+            adb shell am start -W -a android.intent.action.VIEW -d https://motazalqmi.vercel.app/articles/imru-al-qais-poetic-imagery com.moataz.motazalqmi
+            sleep 4
+            adb exec-out screencap -p > android/screenshots/reader.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Premium-UI-API-${{ matrix.api }}
-          path: android/app/build/reports/androidTests/
+          path: |
+            android/app/build/reports/androidTests/
+            android/screenshots/
   release:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/feat/motazalqami-android-premium-v2' || github.ref == 'refs/heads/feat/motazalqami-premium-verification')
     needs: [quality, ui]
