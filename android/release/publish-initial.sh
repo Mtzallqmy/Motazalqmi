@@ -2,6 +2,8 @@
 set -euo pipefail
 umask 077
 release_tag=v2.0.0
+current_head="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)"
+if [ "$current_head" != "$GITHUB_SHA" ]; then echo 'Newer source exists; refusing stale publication.'; exit 1; fi
 output="$GITHUB_WORKSPACE/android/release/output"
 private_dir="$RUNNER_TEMP/motaz-signing"
 mkdir -p "$output" "$private_dir"

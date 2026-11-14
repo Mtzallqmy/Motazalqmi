@@ -95,6 +95,11 @@ jobs:
             echo 'Release already exists; never generate a replacement signing key.'
             exit 0
           fi
+          current_head="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)"
+          if [ "$current_head" != "$GITHUB_SHA" ]; then
+            echo 'A newer revision exists; publishing is reserved for its quality checks.'
+            exit 0
+          fi
           echo 'publish=true' >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
         if: steps.gate.outputs.publish == 'true'

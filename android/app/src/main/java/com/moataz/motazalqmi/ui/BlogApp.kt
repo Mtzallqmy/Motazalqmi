@@ -73,7 +73,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
     val id = entry.arguments?.getString("id").orEmpty()
     when (id) {
      "about" -> About(library.about)
-     "quotes" -> Quotes(library, vm::save)
+     "quotes" -> Quotes(library, settings, vm::save) { nav.navigate("article/${Uri.encode(it)}") }
      else -> ArticleList(library.articles.filter { it.id in library.available && it.category == id }, settings,
       library.sections.find { it.id == id }?.title ?: "المقالات", { nav.navigate("article/${Uri.encode(it)}") })
     }
@@ -99,7 +99,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
 }
 @Composable private fun Home(library: Library, settings: ReadingSettings, busy: Boolean, sync: () -> Unit, open: (String) -> Unit, section: (String) -> Unit) {
  val published = library.articles.filter { it.id in library.available }
- LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+ LazyColumn(Modifier.fillMaxSize().testTag("home-feed"), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
   item { Row(verticalAlignment = Alignment.CenterVertically) {
    Column(Modifier.weight(1f)) { Text("مكتبة الكلمة والفكرة", color = MaterialTheme.colorScheme.secondary); Title("مدونة معتز العلقمي") }
    IconButton(onClick = sync, enabled = !busy) { Icon(Icons.Default.Sync, "تحديث المحتوى") }
@@ -158,10 +158,11 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
   ArticleList(results, settings, "${results.size} من النتائج", open)
  }
 }
-@Composable private fun Quotes(library: Library, save: (String) -> Unit) {
+@Composable private fun Quotes(library: Library, settings: ReadingSettings, save: (String) -> Unit, open: (String) -> Unit) {
  LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
   item { Title("اقتباسات") }; if (library.quotes.isEmpty()) item { Empty() }
   items(library.quotes, key = { quoteId(it) }) { QuoteCard(it, library.states[quoteId(it)]?.saved == true, { save(quoteId(it)) }) }
+  items(library.articles.filter { it.id in library.available && it.category == "quotes" }, key = { it.id }) { ArticleCard(it, settings, open) }
  }
 }
 @Composable private fun QuoteCard(q: QuoteDto, saved: Boolean, save: () -> Unit, interactive: Boolean = true) {
@@ -186,7 +187,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
   Row(Modifier.horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
    listOf("المحفوظات", "سجل القراءة", "أكمل القراءة").forEachIndexed { i, label -> FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(label) }) }
   }
-  LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+  LazyColumn(modifier = Modifier.testTag("saved-feed"), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
    if (articles.isEmpty()) item { Empty("لا توجد مقالات هنا بعد") }
    items(articles, key = { it.id }) { ArticleCard(it, settings, open) }
    if (filter == 0) items(library.quotes.filter { library.states[quoteId(it)]?.saved == true }, key = { quoteId(it) }) { q -> QuoteCard(q, true, { save(quoteId(q)) }) }

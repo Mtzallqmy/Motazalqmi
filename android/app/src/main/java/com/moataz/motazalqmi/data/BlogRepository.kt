@@ -25,6 +25,7 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
  @ApplicationContext private val context: Context
 ) {
  private val mutex = Mutex()
+ private val syncMutex = Mutex()
  private val dao = db.dao()
  val library = combine(dao.articles(), dao.states(), dao.metadata()) { rows, states, metadata ->
   val m = metadata.associate { it.key to it.payload }
@@ -52,10 +53,10 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
    marker.writeText("1")
   }
  } }
- suspend fun sync() = withContext(Dispatchers.IO) { mutex.withLock {
+ suspend fun sync() = withContext(Dispatchers.IO) { syncMutex.withLock {
   val snapshot = api.snapshot()
   require(snapshot.apiVersion == 1 && snapshot.complete && snapshot.mode == "snapshot") { "Incomplete snapshot" }
-  applySnapshot(snapshot, true)
+  mutex.withLock { applySnapshot(snapshot, true) }
  } }
  private suspend fun applySnapshot(s: Snapshot, network: Boolean) {
   require(s.articles.size <= 2000 && s.total == s.articles.size)
