@@ -1,0 +1,50 @@
+name: Publish verified v2.1.0 debug APK (prerelease)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-v2-debug.yml']
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  debug-prerelease:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Download previously verified APK from successful ARM64 build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download 43628811627 --repo "$GITHUB_REPOSITORY" --name Motazalqmi-v2-ARM64-Only-Debug-APK --dir /tmp/verified
+          test -f /tmp/verified/app/build/outputs/apk/debug/app-debug.apk
+          mkdir -p release
+          cp /tmp/verified/app/build/outputs/apk/debug/app-debug.apk release/Motazalqmi-v2.1.0-ARM64-Debug.apk
+          echo 'cc3ff7b772fb5f7fd565550b8c9e31c9a3624726d7ebf5ce0e378afd0fb81a8e  release/Motazalqmi-v2.1.0-ARM64-Debug.apk' | sha256sum --check
+          unzip -t release/Motazalqmi-v2.1.0-ARM64-Debug.apk | tail -1
+          unzip -Z1 release/Motazalqmi-v2.1.0-ARM64-Debug.apk | grep -F 'lib/arm64-v8a/'
+          if unzip -Z1 release/Motazalqmi-v2.1.0-ARM64-Debug.apk | grep -Eq '^lib/(armeabi-v7a|armeabi|x86|x86_64)/'; then
+            echo 'Unexpected architecture found in ARM64-only APK' >&2
+            exit 1
+          fi
+          (cd release && sha256sum Motazalqmi-v2.1.0-ARM64-Debug.apk > SHA256SUMS)
+      - name: Publish test-only download URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=v2.1.0-debug.1
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Existing prerelease retained, never overwrite binaries under a published tag.'
+            exit 0
+          fi
+          gh release create "$tag" release/Motazalqmi-v2.1.0-ARM64-Debug.apk release/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --target c5c6ffb6d4c9464bfa8d01bc2747ed806d78c1a3 \
+            --prerelease \
+            --title 'مدونة معتز العلقمي v2.1.0 — ARM64 TEST BUILD' \
+            --notes 'Android 9+ ARM64 testing build (minSdk 26, versionCode 20100). Verified by successful GitHub Actions build, unit tests, lint, and Android 8/10 emulator tests: https://github.com/Mtzallqmy/Motazalqmi/actions/runs/43628811627. This APK is DEBUG-SIGNED, not a production release; cannot upgrade an existing production-signed installation. This release is for standalone clean-device testing only. Do not uninstall a production copy without safely preserving its app data. Production signing must use the original signing key.'
