@@ -1,3 +1,4 @@
+import { allowBurst } from './rateLimit.js';
 import { createHash } from 'node:crypto';
 import { database, articleRow } from './db.js';
 
@@ -7,8 +8,13 @@ export function publicGet(req, res) {
   res.setHeader('Allow', 'GET, HEAD');
   if (!['GET','HEAD'].includes(req.method)) {
     res.setHeader('Cache-Control', 'no-store');
-    res.status(405).json({error:'Method not allowed'});
+    res.status(405).json({apiVersion:1,error:'Method not allowed',code:'METHOD_NOT_ALLOWED'});
     return false;
+  }
+  const identity=String(req.headers?.['x-forwarded-for']||req.socket?.remoteAddress||'anonymous').split(',')[0].trim();
+  if(!allowBurst(identity)) {
+    res.setHeader('Retry-After','60');res.setHeader('Cache-Control','no-store');
+    res.status(429).json({apiVersion:1,code:'RATE_LIMITED',error:'Too many requests'});return false;
   }
   return true;
 }
@@ -25,7 +31,7 @@ export function sendJson(req,res,payload,{seconds=60}={}) {
 export function publicError(res,err) {
   console.error('Public blog API failed',err?.code || err?.name || 'unexpected');
   res.setHeader('Cache-Control','no-store');
-  return res.status(503).json({error:'تعذر تحميل المحتوى حاليًا.'});
+  return res.status(503).json({apiVersion:1,code:'CONTENT_UNAVAILABLE',error:'تعذر تحميل المحتوى حاليًا.'});
 }
 export function param(req,key,max=120){
   const x=req.query?.[key];
@@ -36,32 +42,7 @@ export function boundedInt(value,fallback,min,max){
   if(!/^\d{1,7}$/.test(String(value)))return fallback;
   const n=Number(value);return Math.min(Math.max(n,min),max);
 }
-export async function listPublished({limit=100,offset=0,category='',q='',featured=false,full=false}={}) {
-  const sql=database();
-  const search=`%${q.replace(/[\\%_]/g,'\\$&')}%`;
-  // Filtering and pagination remain parameterized: no SQL text is built from client input.
-  const where=category||q||featured;
-  let rows,count;
-  if(where){
-    [rows,count]=await Promise.all([
-      sql`SELECT id,slug,status,publish_date::text,data FROM blog_articles
-        WHERE status='published'
-        AND (${category}='' OR data->>'category'=${category})
-        AND (${q}='' OR data->>'title' ILIKE ${search} ESCAPE '\\' OR data->>'excerpt' ILIKE ${search} ESCAPE '\\' OR data->>'content' ILIKE ${search} ESCAPE '\\')
-        AND (${featured}=false OR data->>'featured'='true')
-        ORDER BY publish_date DESC,updated_at DESC LIMIT ${limit} OFFSET ${offset}`,
-      sql`SELECT COUNT(*)::int AS total FROM blog_articles
-        WHERE status='published'
-        AND (${category}='' OR data->>'category'=${category})
-        AND (${q}='' OR data->>'title' ILIKE ${search} ESCAPE '\\' OR data->>'excerpt' ILIKE ${search} ESCAPE '\\' OR data->>'content' ILIKE ${search} ESCAPE '\\')
-        AND (${featured}=false OR data->>'featured'='true')`
-    ]);
-  } else {
-    [rows,count]=await Promise.all([
-      sql`SELECT id,slug,status,publish_date::text,data FROM blog_articles WHERE status='published' ORDER BY publish_date DESC,updated_at DESC LIMIT ${limit} OFFSET ${offset}`,
-      sql`SELECT COUNT(*)::int AS total FROM blog_articles WHERE status='published'`
-    ]);
-  }
-  const articles=rows.map(r=>{const a=articleRow(r);if(!full)delete a.content;return a;});
-  return {articles,total:count[0]?.total||0,offset,limit,hasMore:offset+articles.length<(count[0]?.total||0)};
+export async function listPublished(options={}) {
+ const {publishedSnapshot,pageSnapshot}=await import('./contentSnapshot.js');
+ return pageSnapshot(await publishedSnapshot(),options);
 }

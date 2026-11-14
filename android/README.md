@@ -1,36 +1,39 @@
-# مدونة معتز العلقمي — التطبيق الأصلي لنظام Android
+# مدونة معتز العلقمي — Android 2.0
 
-**ليس WebView**. تطبيق Android أصلي Java / Android SDK، مع مكتبة JNI بتصنيف `arm64-v8a` فقط. معرف الحزمة الثابت: `com.moataz.motazalqmi`، Android 8.0 فما فوق (`minSdk 26`)، والإصدار الأول `1.0.0`.
+برمجة وتطوير: معتز العلقمي — تعز — اليمن — 2026م.
 
-## مصدر المحتوى الحقيقي
+Native Kotlin/Compose reader; no WebView. Application ID `com.moataz.motazalqmi`, minSdk 26, target/compile 35, version 2.0.0/code 20000. Production ABI arm64-v8a. DataStore/Compose supply genuine native libraries; the old dummy identity library is removed.
 
-يستمد التطبيق **كل المقالات المنشورة والأقسام والاقتباسات والتعريف بالمدونة** من `https://motazalqmi.vercel.app/api/v1/bootstrap`، ويجلب الصفحات الأخرى من `/api/v1/articles?full=1&limit=100&offset=N`. لا توجد قاعدة بيانات Neon أو كلمة مرور مخزنة داخل APK. الموقع والتطبيق يقرآن نفس Neon Postgres؛ تحديث المقالة في لوحة الكاتب يظهر في التطبيق عند المزامنة.
+## Build
 
-- شاشة رئيسية بقوائم المقالات، صور الأغلفة، الأقسام والبحث العربي في كامل المحتوى.
-- قارئ نصي أصلي للمقالات مع تنسيق العناوين والتغليظ، تكبير/تصغير الخط ومشاركة المقالة.
-- تبويب الأقسام والاقتباسات والنبذة عن المدونة، وروابط عميقة تفتح المقالات.
-- حفظ المقالات للمفضلة؛ تنزيل المحتوى النصي المنشور بعد الاتصال الأول إلى ملف خاص بالتطبيق لمتابعة القراءة دون اتصال.
-- يتم تحديث مكتبة المقالات في كل تشغيل؛ إعادة المحاولة من صفحة الأقسام. تُحفظ الصور التي عُرضت سابقًا محليًا.
-- المسودات ولوحة التحرير لا تُكشفان في الـAPI العام؛ الإدارة تستمر على الموقع حصريًا.
-
-## البناء
-
-Android Studio: افتح مجلد `android` ثم Gradle Sync و Build APK. يتطلب JDK 17 وAndroid SDK 35 وNDK `27.2.12479018` وCMake `3.22.1`.
-
-من الطرفية مع Gradle 8.9:
+Java 17 + Gradle 8.9 + Android SDK platform 35 are required.
 
 ```sh
-gradle -p android :app:assembleDebug
+gradle -p android :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+gradle -p android :app:assembleRelease
 ```
 
-يُولّد الملف `android/app/build/outputs/apk/debug/app-debug.apk`، ملف APK **موقّع بمفتاح Debug للتجربة**، قابل للتثبيت للاختبار على ARM64 / Android 8+؛ ليس توقيع الإنتاج النهائي ولا يجب توزيعه كإصدار رسمي نهائي.
+Release is unsigned unless all four environment variables are configured: `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. CI reads corresponding protected GitHub signing secrets, with `ANDROID_KEYSTORE_BASE64` supplying the file. Never commit signing material.
 
-يستطيع GitHub Actions بناء APK تلقائيًا وإرفاقه في صفحة تشغيل workflow `Android Native ARM64 APK`.
+Run emulator tests using `gradle -p android connectedDebugAndroidTest -PtestAbi=x86_64`. This changes only a test build's ABI; do not distribute it as ARM64.
 
-**الإصدار الرسمي:** احفظ مفتاح توقيع إنتاج ثابتًا خارج المستودع، ومرّره عبر GitHub Actions Secrets. لا تضع ملف `.jks` أو كلمة مروره في مستودع عام، ولا تغيّر مفتاح التوقيع بين الإصدارات. البناء بدون مفاتيح الإصدار لا ينتج Release موقعًا رسميًا.
+## Source organization
 
-## سياسة البيانات والخصوصية
+- `data`: Retrofit, published snapshots, Room entities/DAO, preferences, atomic migration and repository.
+- `domain`: Arabic search normalization shared across local search fields.
+- `ui`: ViewModel, Compose screens, typography, Markdown engine, reader controls.
+- `BlogApplication`: Hilt graph and constrained WorkManager job.
 
-لا حاجة لتسجيل دخول القارئ، وليس في التطبيق تتبع أو جمع معرفات. المحتوى العام يأتي من API عبر HTTPS، وتخزن المفضلة محليًا فقط. روابط الصور آمنة عبر HTTPS؛ يمكن إعادة تحميلها عند الاتصال. 
+Room is the source read by UI Flow. Public content and user reading state live in separate tables. All snapshot rows are validated before a transaction retires old published rows, upserts new rows, updates metadata, and prunes unsaved retired rows. Saved retired content is retained privately and marked unavailable. Missing/incomplete/error responses never authorize deletion. A complete empty snapshot does.
 
-© 2026 معتز العلقمي – تعز – اليمن. جميع الحقوق محفوظة.
+First launch imports the old JSON cache and SharedPreferences `saved` IDs without deleting the originals. New installs use the published website snapshot whose provenance is packaged in assets. Last network sync is kept separately from seed installation.
+
+Sync runs at launch, on explicit request, and periodically (six-hour minimum requested interval) under WorkManager network/battery constraints with exponential retry. Scheduling is subject to Android restrictions; no instant background delivery is promised.
+
+Reader preferences use DataStore; positions/bookmarks/history use Room. Three redistributable SIL OFL Arabic fonts are bundled and licenses are in assets and `android/licenses`.
+
+## Known release considerations
+
+A newly generated production certificate cannot update an older Debug or differently signed installation. Preserve the new certificate for subsequent releases. Hardware ARM64 performance must be measured on actual devices; x86 emulator tests alone do not establish it.
+
+The new API endpoints must be deployed before testing network refresh. The published snapshot currently has a fail-closed limit of 2000 articles / 3 MiB to stay within serverless response bounds; larger catalogues need versioned snapshot paging.

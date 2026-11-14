@@ -3,8 +3,8 @@ import { publicGet, sendJson } from '../../server/publicApi.js';
 // Public build catalogue: no GitHub token, database secret or Android signing key is exposed.
 export default async function handler(req,res){
  if(!publicGet(req,res))return;
- const data={apiVersion:1,appId:'com.moataz.motazalqmi',version:'1.0.0',versionCode:1,minAndroid:'8.0',minSdk:26,architecture:'arm64-v8a',native:true,
-  source:'https://github.com/Mtzallqmy/Motazalqmi/tree/main/android',
+ const data={apiVersion:1,appId:'com.moataz.motazalqmi',version:'2.0.0',versionCode:20000,minAndroid:'8.0',minSdk:26,architecture:'arm64-v8a',native:true,
+  source:'https://github.com/Mtzallqmy/Motazalqmi/tree/feat/motazalqami-android-premium-v2/android',
   builds:'https://github.com/Mtzallqmy/Motazalqmi/actions/workflows/android.yml',
   releaseStatus:'Signing key required for official production release',latestBuild:null};
  try {
