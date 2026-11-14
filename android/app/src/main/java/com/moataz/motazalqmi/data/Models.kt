@@ -8,7 +8,9 @@ data class ArticleDto(
  val id: String = "", val slug: String = "", val title: String = "", val content: String = "",
  val excerpt: String = "", val category: String = "general", val author: String = "",
  val publishDate: String = "", val coverImage: String = "", val featured: Boolean = false,
- val tags: List<String> = emptyList(), val status: String = "published"
+ val tags: List<String> = emptyList(), val status: String = "published",
+ val readTime: String = "5 دقائق", val views: Int = 0, val likes: Int = 0,
+ val updatedAt: String = ""
 )
 data class SectionDto(val id: String = "", val title: String = "", val subtitle: String = "")
 data class QuoteDto(val id: String = "", val text: String = "", val author: String = "", val source: String = "")
@@ -43,3 +45,11 @@ abstract class BlogDatabase : RoomDatabase() { abstract fun dao(): BlogDao }
 
 fun quoteId(q: QuoteDto): String = "quote:" + java.security.MessageDigest.getInstance("SHA-256")
  .digest(q.text.toByteArray()).joinToString("") { "%02x".format(it) }
+
+
+/** First-party origin helps users reach the seven existing images when a third-party CDN is blocked.
+ * Arbitrary external images stay direct HTTPS links, not proxyable URLs. */
+fun readerImageUrl(url:String):String =
+ if(url.startsWith("https://images.unsplash.com/"))
+  "https://motazalqmi.vercel.app/api/v1/image?src="+java.net.URLEncoder.encode(url,"UTF-8")
+ else url

@@ -96,7 +96,7 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
    .filter { it.startsWith("https://")&&it.length<=2048 }.distinct().take(120)
   val loader=context.imageLoader
   for(url in urls){
-   runCatching { loader.execute(ImageRequest.Builder(context).data(url).size(720,480)
+   runCatching { loader.execute(ImageRequest.Builder(context).data(readerImageUrl(url)).size(720,480)
     .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.ENABLED).build()) }
   }
  }

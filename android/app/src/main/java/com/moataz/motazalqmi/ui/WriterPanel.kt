@@ -142,6 +142,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  var slug by rememberSaveable(original?.id){mutableStateOf(original?.slug.orEmpty())}
  var category by rememberSaveable(original?.id){mutableStateOf(original?.category?:"general")}
  var excerpt by rememberSaveable(original?.id){mutableStateOf(original?.excerpt.orEmpty())}
+ var readTime by rememberSaveable(original?.id){mutableStateOf(original?.readTime?:"5 دقائق")}
  var content by rememberSaveable(original?.id){mutableStateOf(original?.content.orEmpty())}
  var cover by rememberSaveable(original?.id){mutableStateOf(original?.coverImage.orEmpty())}
  var tags by rememberSaveable(original?.id){mutableStateOf(original?.tags?.joinToString("،").orEmpty())}
@@ -153,7 +154,9 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   OutlinedTextField(slug,{slug=it.take(150)},label={Text("الرابط الوصفي")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(category,{category=it.take(60)},label={Text("معرّف القسم")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(cover,{cover=it.take(2048)},label={Text("رابط صورة الغلاف HTTPS")},modifier=Modifier.fillMaxWidth())
+  if(cover.startsWith("https://"))coil.compose.AsyncImage(model=cover,contentDescription="معاينة صورة الغلاف",modifier=Modifier.fillMaxWidth().height(160.dp),contentScale=androidx.compose.ui.layout.ContentScale.Crop)
   OutlinedTextField(excerpt,{excerpt=it.take(1000)},label={Text("ملخص المقال")},modifier=Modifier.fillMaxWidth())
+  OutlinedTextField(readTime,{readTime=it.take(100)},label={Text("مدة القراءة التقديرية")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(tags,{tags=it.take(500)},label={Text("وسوم مفصولة بفواصل")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(content,{content=it.take(180000)},label={Text("النص الكامل (Markdown)")},minLines=10,modifier=Modifier.fillMaxWidth())
   Row(verticalAlignment=Alignment.CenterVertically){
@@ -163,7 +166,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   fun prepared(status:String):ArticleDto{
    val articleSlug=slug.ifBlank{ "article-"+System.currentTimeMillis() }
    return (original?:ArticleDto()).copy(title=title.trim(),slug=articleSlug,category=category,
-    content=content,excerpt=excerpt,coverImage=cover,featured=featured,status=status,
+    content=content,excerpt=excerpt,coverImage=cover,readTime=readTime,featured=featured,status=status,
     author=original?.author?.takeIf{it.isNotBlank()} ?: "معتز العلقمي",
     publishDate=original?.publishDate?.takeIf{it.isNotBlank()} ?: java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US).format(java.util.Date()),
     tags=tags.split('،',',').map{it.trim()}.filter{it.isNotBlank()})

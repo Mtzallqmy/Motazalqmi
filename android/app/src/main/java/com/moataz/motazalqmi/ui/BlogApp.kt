@@ -135,7 +135,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
  val context = LocalContext.current
  val cm = context.getSystemService(ConnectivityManager::class.java)
  val wifi = cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
- if (url.startsWith("https://")) SubcomposeAsyncImage(model = coil.request.ImageRequest.Builder(context).data(url)
+ if (url.startsWith("https://")) SubcomposeAsyncImage(model = coil.request.ImageRequest.Builder(context).data(readerImageUrl(url))
   .networkCachePolicy(if (settings.wifiImages && !wifi) coil.request.CachePolicy.DISABLED else coil.request.CachePolicy.ENABLED)
   .diskCachePolicy(coil.request.CachePolicy.ENABLED).build(),
   contentDescription = "صورة من المقال", modifier = Modifier.fillMaxWidth().height(180.dp),
@@ -263,7 +263,7 @@ private fun share(context: android.content.Context, text: String) {
       Cover(part.imageUrl, settings)
       Spacer(Modifier.height(14.dp))
      } else if (!part.text.isNullOrBlank()) {
-      val partContent = part.text
+      val partContent = part.text.orEmpty()
       val parsed = remember(partContent) { engine.renderer.render(engine.renderer.parse(partContent)) }
       AndroidView(factory = { TextView(it).apply {
        textDirection = android.view.View.TEXT_DIRECTION_FIRST_STRONG_RTL
