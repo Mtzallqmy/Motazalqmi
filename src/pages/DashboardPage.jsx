@@ -9,6 +9,7 @@ import { ARTICLE_CATEGORIES, getCategory } from '../data/categories';
 import { AUTHOR, DEFAULT_IMAGE, slugify, articlePath } from '../lib/format';
 import { MediaUploader } from '../components/MediaUploader';
 import {ArticleMedia,AuthorBadge} from '../components/ArticleMedia';
+import {TelegramAdmin} from '../components/TelegramAdmin';
 
 function blankArticle() {
   return { title:'', slug:'', author:AUTHOR, authorImage:'', category:'general', excerpt:'', content:'', coverImage:DEFAULT_IMAGE,
@@ -109,6 +110,7 @@ export function DashboardPage() {
       <div><p className="text-gold text-xs font-bold flex gap-2 items-center"><Settings size={17}/> نظام إدارة المحتوى الآمن</p><h1 className="font-literature text-3xl sm:text-4xl font-bold mt-2">لوحة الكاتب</h1><p className="text-white/70 text-sm mt-2">مرحبًا، {user?.email || 'أيها الكاتب'} — تحرير المقالات والمسودات ونشرها</p></div>
       <div className="flex flex-wrap gap-2"><button onClick={clear} className="bg-gold text-ink px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><PlusCircle size={17}/> مقالة جديدة</button><Link to="/" className="bg-white/15 px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><Eye size={17}/> معاينة</Link><button onClick={openEditorial} className="bg-white/15 px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><Settings size={17}/> إدارة المدونة</button><button onClick={logout} className="border border-white/40 px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><LogOut size={17}/> خروج</button></div>
     </header>
+    <TelegramAdmin/>
     {isDemo && <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#F4ECE1] border border-gold/40 p-5"><p className="text-sm">المقالات الحالية أمثلة تجريبية. استوردها إلى Neon إن رغبت في إدارتها، أو ابدأ بكتابة مقالة جديدة.</p><button disabled={busy} onClick={handleImport} className="bg-teal text-white rounded-xl px-5 py-2.5 font-bold text-sm inline-flex items-center gap-2"><Upload size={17}/> استيراد الأمثلة السبعة</button></div>}
     {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 text-red-800 border border-red-200 p-4">{error}</p>}
     {success && <p role="status" className="mt-5 rounded-xl bg-cream text-teal border border-gold/30 p-4">{success}</p>}
