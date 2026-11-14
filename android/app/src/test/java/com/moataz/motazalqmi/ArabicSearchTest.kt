@@ -12,4 +12,10 @@ class ArabicSearchTest {
   assertTrue(ArabicSearch.matches("معتز الشعر", "معتز العلقمي", "الشِّعْر العربي"))
   assertFalse(ArabicSearch.matches("معتز الفلك", "معتز العلقمي", "الشعر"))
  }
+ @Test fun matchesCommonOrthographicVariants() {
+  assertTrue(ArabicSearch.matches("قصيده", "قَصِيدَةٌ"))
+  assertTrue(ArabicSearch.matches("مسووليه", "مَسْؤُولِيَّة"))
+  assertTrue(ArabicSearch.matches("بدايه", "بِدَايَة"))
+  assertTrue(ArabicSearch.matches("رويه", "رؤية"))
+ }
 }

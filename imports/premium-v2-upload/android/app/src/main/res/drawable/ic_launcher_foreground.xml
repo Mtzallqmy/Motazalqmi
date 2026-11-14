@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Open Book Base -->
+    <path
+        android:fillColor="#C6A052"
+        android:pathData="M24,62 C34,58 46,60 54,66 C62,60 74,58 84,62 L84,74 C74,70 62,72 54,78 C46,72 34,70 24,74 Z" />
+    <!-- Calligraphy Quill Nib -->
+    <path
+        android:fillColor="#F5EFE4"
+        android:pathData="M54,24 L62,46 L54,58 L46,46 Z" />
+    <path
+        android:fillColor="#1C1915"
+        android:pathData="M53,34 L55,34 L55,48 L53,48 Z" />
+    <!-- Gold Accent Ring -->
+    <path
+        android:strokeColor="#C6A052"
+        android:strokeWidth="1.5"
+        android:pathData="M54,16 A38,38 0 1,0 54,92 A38,38 0 1,0 54,16 Z" />
+</vector>

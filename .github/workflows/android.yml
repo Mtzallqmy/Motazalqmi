@@ -34,6 +34,27 @@ jobs:
           "$SDK_MANAGER" 'platforms;android-35' 'build-tools;35.0.0' 
       - name: Compile, unit tests, lint and unsigned Release
         run: gradle -p android :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon
+      - name: Verify the generated debug APK before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > android/debug-package.txt
+          grep -F "package: name='com.moataz.motazalqmi'" android/debug-package.txt
+          grep -F "sdkVersion:'26'" android/debug-package.txt
+          sha256sum "$APK" > android/DEBUG-SHA256SUMS
+      - name: Publish directly installable debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motazalqmi-v2-Installable-Debug-APK
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/debug-package.txt
+            android/DEBUG-SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload verification outputs
         uses: actions/upload-artifact@v4
         with:
