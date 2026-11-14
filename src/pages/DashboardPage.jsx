@@ -7,13 +7,15 @@ import { useAuth } from '../context/AuthContext';
 import { useArticles } from '../hooks/useArticles';
 import { ARTICLE_CATEGORIES, getCategory } from '../data/categories';
 import { AUTHOR, DEFAULT_IMAGE, slugify, articlePath } from '../lib/format';
+import { MediaUploader } from '../components/MediaUploader';
+import {ArticleMedia,AuthorBadge} from '../components/ArticleMedia';
 
 function blankArticle() {
-  return { title:'', slug:'', category:'general', excerpt:'', content:'', coverImage:DEFAULT_IMAGE,
+  return { title:'', slug:'', author:AUTHOR, authorImage:'', category:'general', excerpt:'', content:'', coverImage:DEFAULT_IMAGE,
     readTime:'5 دقائق', featured:false, tags:'الأدب العربي, ثقافة', fontFamily:'amiri', fontSize:22 };
 }
 function formFrom(article) {
-  return { title: article.title || '', slug:article.slug || '', category:article.category || 'general',
+  return { title: article.title || '', slug:article.slug || '', author:article.author||AUTHOR, authorImage:article.authorImage||'', category:article.category || 'general',
     excerpt:article.excerpt || '', content:article.content || '', coverImage:article.coverImage || DEFAULT_IMAGE,
     readTime:article.readTime || '5 دقائق', featured:Boolean(article.featured), tags:(article.tags || []).join(', '),
     fontFamily:article.fontFamily || 'amiri', fontSize:article.fontSize || 22 };
@@ -48,6 +50,7 @@ export function DashboardPage() {
    catch(e){setError(e.message||'تعذّر حفظ إعدادات المدونة.');}finally{setBusy(false);}
   };
   const editorRef = useRef(null);
+  const insertMedia=(markdown)=>{const target=editorRef.current;const start=target?.selectionStart??form.content.length;const end=target?.selectionEnd??start;change('content',form.content.slice(0,start)+'\n\n'+markdown+'\n\n'+form.content.slice(end));setPreview(false);};
 
   useEffect(() => { document.title = 'لوحة الكاتب | مدونة معتز العلقمي'; }, []);
   useEffect(() => {
@@ -79,7 +82,7 @@ export function DashboardPage() {
     const old = articles.find(a => a.id === editingId);
     const item = { ...(old || {}), ...(editingId ? { id: editingId } : {}), title, slug,
       category: form.category, excerpt: form.excerpt.trim() || content.replace(/[#>*_]/g,'').slice(0,160)+'…',
-      content, coverImage: form.coverImage.trim() || DEFAULT_IMAGE, author: old?.author || AUTHOR,
+      content, coverImage: form.coverImage.trim() || DEFAULT_IMAGE, author: form.author.trim() || AUTHOR, authorImage:form.authorImage.trim(),
       publishDate: old?.publishDate || localeToday(), readTime:form.readTime.trim() || '5 دقائق',
       featured:form.featured, fontFamily:form.fontFamily, fontSize:Number(form.fontSize), status, tags:form.tags.split(/[,،]/).map(t=>t.trim()).filter(Boolean),
       views:old?.views || 0, likes:old?.likes || 0 };
@@ -138,8 +141,20 @@ export function DashboardPage() {
             <label className="text-sm font-bold">زمن القراءة<input value={form.readTime} onChange={e=>change('readTime',e.target.value)} className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream"/></label>
             <label className="text-sm font-bold">الرابط الوصفي<input dir="ltr" value={form.slug} onChange={e=>change('slug',e.target.value)} placeholder="my-article" className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream text-left"/></label>
           </div>
-          <label className="block text-sm font-bold">رابط صورة الغلاف<input type="url" dir="ltr" value={form.coverImage} onChange={e=>change('coverImage',e.target.value)} className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream text-left text-sm"/></label>
-          {form.coverImage && <img loading="lazy" src={form.coverImage} alt="معاينة غلاف المقالة" className="h-36 w-full object-cover rounded-xl border border-gold/30"/>}
+          <div className="rounded-2xl bg-cream/50 border border-gold/30 p-4 space-y-3">
+            <h3 className="font-literature font-bold text-teal text-lg">اسم كاتب المقالة وصورته</h3>
+            <label className="block text-sm font-bold">اسم الكاتب
+             <input value={form.author} maxLength={150} onChange={e=>change('author',e.target.value)} className="block w-full mt-2 rounded-xl border border-gold/40 bg-white p-3"/>
+            </label>
+            <label className="block text-sm font-bold">رابط الصورة الشخصية (اختياري)
+             <input value={form.authorImage} dir="ltr" onChange={e=>change('authorImage',e.target.value)} placeholder="https://…" className="block w-full text-left mt-2 rounded-xl border border-gold/40 bg-white p-3"/>
+            </label>
+            <MediaUploader purpose="author" disabled={busy} onUploaded={url=>change('authorImage',url)}/>
+            <div className="rounded-xl bg-white border border-gold/20 px-4 py-3"><AuthorBadge name={form.author} image={form.authorImage}/></div>
+          </div>
+                    <label className="block text-sm font-bold">رابط صورة الغلاف<input type="url" dir="ltr" value={form.coverImage} onChange={e=>change('coverImage',e.target.value)} className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream text-left text-sm"/></label>
+          <MediaUploader purpose="cover" disabled={busy} onUploaded={url=>change('coverImage',url)}/>
+                    {form.coverImage && <img loading="lazy" src={form.coverImage} alt="معاينة غلاف المقالة" className="h-36 w-full object-cover rounded-xl border border-gold/30"/>}
           <label className="block text-sm font-bold">المقتطف التعريفي<textarea rows={3} value={form.excerpt} onChange={e=>change('excerpt',e.target.value)} placeholder="نبذة مختصرة عن المقالة" className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream"/></label>
           <div className="rounded-2xl border border-gold/30 bg-cream/70 p-4 space-y-3">
             <div className="flex flex-wrap gap-4 items-center justify-between">
@@ -158,12 +173,17 @@ export function DashboardPage() {
             </div>
             <p className="text-xs text-ink/60">الكلمات: {form.content.trim()?form.content.trim().split(/\s+/).length:0} · الحروف: {form.content.length}</p>
           </div>
-          <div><div className="flex flex-wrap items-center justify-between gap-2 mb-2"><label htmlFor="article-content" className="text-sm font-bold">متن المقالة الكامل *</label><div className="flex gap-1 flex-wrap"><button onClick={()=>format('\n\n### ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-teal">عنوان فرعي</button><button onClick={()=>format('\n\n> ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-rust flex items-center gap-1"><Quote size={13}/> اقتباس / شعر</button><button onClick={()=>format('**','**')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">عريض</button><button onClick={()=>format('«','»')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">« »</button>
+          <div className="space-y-2">
+            <h3 className="font-literature font-bold text-teal text-lg">مرفقات المقالة</h3>
+            <p className="text-xs text-ink/60">ارفع الصورة أو الفيديو أو الصوت من جهازك ثم سيُدرج داخل متن المقالة تلقائيًا في موضع المؤشر.</p>
+            <MediaUploader purpose="body" disabled={busy} onUploaded={(_,file,markdown)=>insertMedia(markdown)}/>
+          </div>
+                    <div><div className="flex flex-wrap items-center justify-between gap-2 mb-2"><label htmlFor="article-content" className="text-sm font-bold">متن المقالة الكامل *</label><div className="flex gap-1 flex-wrap"><button onClick={()=>format('\n\n### ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-teal">عنوان فرعي</button><button onClick={()=>format('\n\n> ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-rust flex items-center gap-1"><Quote size={13}/> اقتباس / شعر</button><button onClick={()=>format('**','**')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">عريض</button><button onClick={()=>format('«','»')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">« »</button>
             <button onClick={()=>format('## ')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Heading2 size={13}/> عنوان كبير</button>
             <button onClick={()=>format('*','*')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Italic size={13}/> مائل</button>
             <button onClick={()=>format('\n- ')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><List size={13}/> قائمة</button>
             <button onClick={()=>format('[','](https://example.com)')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Link2 size={13}/> رابط</button>
-            <button onClick={()=>format('![وصف الصورة](',')')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Image size={13}/> صورة</button></div></div><textarea id="article-content" ref={editorRef} rows={15} value={form.content} onChange={e=>change('content',e.target.value)} placeholder="اكتب المقالة هنا. يدعم المحرر Markdown للعناوين والاقتباسات والنصوص المنسقة…" className={`w-full border border-gold/40 rounded-2xl p-4 bg-cream leading-loose ${preview?'hidden':''}`}/>{preview && <div aria-label="معاينة المقال" className="article-prose max-h-[640px] overflow-y-auto rounded-2xl border border-gold/30 bg-white p-6" style={{fontFamily:form.fontFamily==='tajawal'?"'Tajawal',sans-serif":form.fontFamily==='naskh'?"'Noto Naskh Arabic','Amiri',serif":"'Amiri',serif",fontSize:`${form.fontSize}px`}}><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{form.content || 'اكتب نصًا لمعاينته هنا.'}</ReactMarkdown></div>}</div>
+            <button onClick={()=>format('![وصف الصورة](',')')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Image size={13}/> صورة</button></div></div><textarea id="article-content" ref={editorRef} rows={15} value={form.content} onChange={e=>change('content',e.target.value)} placeholder="اكتب المقالة هنا. يدعم المحرر Markdown للعناوين والاقتباسات والنصوص المنسقة…" className={`w-full border border-gold/40 rounded-2xl p-4 bg-cream leading-loose ${preview?'hidden':''}`}/>{preview && <div aria-label="معاينة المقال" className="article-prose max-h-[640px] overflow-y-auto rounded-2xl border border-gold/30 bg-white p-6" style={{fontFamily:form.fontFamily==='tajawal'?"'Tajawal',sans-serif":form.fontFamily==='naskh'?"'Noto Naskh Arabic','Amiri',serif":"'Amiri',serif",fontSize:`${form.fontSize}px`}}><ReactMarkdown remarkPlugins={[remarkGfm]} components={{img:ArticleMedia}} skipHtml>{form.content || 'اكتب نصًا لمعاينته هنا.'}</ReactMarkdown></div>}</div>
           <div className="grid sm:grid-cols-2 gap-4 items-center"><label className="text-sm font-bold">الوسوم (افصل بفاصلة)<input value={form.tags} onChange={e=>change('tags',e.target.value)} className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream"/></label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" className="accent-[#0D5C63] h-4 w-4" checked={form.featured} onChange={e=>change('featured',e.target.checked)}/> إظهار في المقالات المميزة</label></div>
           <div className="flex flex-wrap gap-3 border-t border-gold/20 pt-5"><button disabled={busy} onClick={()=>submit('published')} className="inline-flex items-center gap-2 bg-teal text-white px-6 py-3 rounded-xl text-sm font-bold shadow-sm"><Send size={17}/> نشر المقالة</button><button disabled={busy} onClick={()=>submit('draft')} className="inline-flex items-center gap-2 bg-gold/20 text-rust px-5 py-3 rounded-xl text-sm font-bold"><Save size={17}/> حفظ كمسودة</button>{editingId && <button onClick={clear} className="text-ink/65 underline text-sm">إلغاء التعديل</button>}</div>
         </div>
