@@ -99,7 +99,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
 }
 @Composable private fun Home(library: Library, settings: ReadingSettings, busy: Boolean, sync: () -> Unit, open: (String) -> Unit, section: (String) -> Unit) {
  val published = library.articles.filter { it.id in library.available }
- LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+ LazyColumn(Modifier.fillMaxSize().testTag("home-feed"), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
   item { Row(verticalAlignment = Alignment.CenterVertically) {
    Column(Modifier.weight(1f)) { Text("مكتبة الكلمة والفكرة", color = MaterialTheme.colorScheme.secondary); Title("مدونة معتز العلقمي") }
    IconButton(onClick = sync, enabled = !busy) { Icon(Icons.Default.Sync, "تحديث المحتوى") }
@@ -180,7 +180,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
   Row(Modifier.horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
    listOf("المحفوظات", "سجل القراءة", "أكمل القراءة").forEachIndexed { i, label -> FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(label) }) }
   }
-  LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+  LazyColumn(modifier = Modifier.testTag("saved-feed"), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
    if (articles.isEmpty()) item { Empty("لا توجد مقالات هنا بعد") }
    items(articles, key = { it.id }) { ArticleCard(it, settings, open) }
    if (filter == 0) items(library.quotes.filter { library.states[quoteId(it)]?.saved == true }, key = { quoteId(it) }) { q -> QuoteCard(q, true, { save(quoteId(q)) }) }

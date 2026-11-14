@@ -25,13 +25,13 @@ class ReaderUiTest {
  @Test fun publishedSeedArticleCanBeOpenedAndBookmarked() {
   val title="سحر البيان في معلقة امرئ القيس: قراءة في هندسة الصورة الشعرية"
   rule.waitUntil(15000) { rule.onAllNodesWithText("في دائرة الضوء").fetchSemanticsNodes().isNotEmpty() }
-  rule.onNode(hasScrollAction()).performScrollToNode(hasText(title))
+  rule.onNodeWithTag("home-feed").performScrollToNode(hasText(title))
   rule.onAllNodesWithText(title).onFirst().performClick()
   rule.onNodeWithContentDescription("حفظ للقراءة لاحقًا").assertIsDisplayed().performClick()
   capture("reader")
   rule.onNodeWithContentDescription("رجوع").performClick()
   rule.onNodeWithText("مكتبتي").performClick()
-  rule.onNode(hasScrollAction()).performScrollToNode(hasText(title))
+  rule.onNodeWithTag("saved-feed").performScrollToNode(hasText(title))
   rule.onNodeWithText(title).assertIsDisplayed()
  }
 }

@@ -38,6 +38,7 @@ android {
    signingConfig signingConfigs.findByName('production')
   }
  }
+ testOptions { unitTests.all { maxHeapSize = "128m" } }
  lint { abortOnError true }
  packaging { resources.excludes += '/META-INF/{AL2.0,LGPL2.1}' }
 }
