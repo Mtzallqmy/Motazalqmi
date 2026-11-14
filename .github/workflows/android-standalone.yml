@@ -1,0 +1,128 @@
+name: Android 8 Plus Installable ARM64 Preview
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-standalone.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-standalone-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  arm64-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Prepare Android 8+ build tools
+        run: |
+          set -euo pipefail
+          SDK_MANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          "$SDK_MANAGER" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build standalone ARM64 APK and run tests
+        run: gradle -p android :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --no-daemon -PmotazArm64Only=true -PmotazSeparatePreview=true
+      - name: Check package, ARM64 ABI, API26, alignment and Android signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > /tmp/app-badging.txt
+          grep -F "package: name='com.moataz.motazalqmi.preview'" /tmp/app-badging.txt
+          grep -F "sdkVersion:'26'" /tmp/app-badging.txt
+          grep -F "native-code: 'arm64-v8a'" /tmp/app-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
+          unzip -t "$APK" | tail -1
+          unzip -Z1 "$APK" > /tmp/apk-entries.txt
+          grep -Eq '^lib/arm64-v8a/.*[.]so$' /tmp/apk-entries.txt
+          if grep -Eq '^lib/(armeabi|armeabi-v7a|x86|x86_64)/' /tmp/apk-entries.txt; then
+            echo 'Non-ARM64 JNI library detected' >&2
+            exit 1
+          fi
+          mkdir -p dist
+          cp "$APK" dist/Motazalqmi-v2.1.0-Android8Plus-ARM64-Standalone.apk
+          (cd dist && sha256sum Motazalqmi-v2.1.0-Android8Plus-ARM64-Standalone.apk > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Motazalqmi-Android8Plus-ARM64-Installable
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+  emulator-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 28]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Enable KVM acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            gradle -p android :app:assembleDebug --no-daemon -PmotazSeparatePreview=true
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm path com.moataz.motazalqmi.preview
+            adb shell am start -W -n com.moataz.motazalqmi.preview/com.moataz.motazalqmi.MainActivity
+            sleep 6
+            adb shell pidof com.moataz.motazalqmi.preview
+            adb shell dumpsys activity activities | grep com.moataz.motazalqmi.preview
+  publish-test-release:
+    needs: [arm64-apk, emulator-install]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Motazalqmi-Android8Plus-ARM64-Installable
+          path: dist
+      - name: Publish standalone installable preview only when all checks pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum --check SHA256SUMS)
+          tag=v2.1.0-standalone.1
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Preview release already exists: no silent replacement.'
+            exit 0
+          fi
+          gh release create "$tag" dist/Motazalqmi-v2.1.0-Android8Plus-ARM64-Standalone.apk dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title 'مدونة معتز العلقمي — ARM64 Android 8+ (Standalone)' \
+            --notes 'Standalone test release for 64-bit Android 8.0+. Package com.moataz.motazalqmi.preview is intentionally different from the production package so a previous production signing certificate cannot cause INSTALL_FAILED_UPDATE_INCOMPATIBLE. Debug signed; installs alongside the official application and does not overwrite its data. The APK uses ARM64 JNI libraries only. Verified via apksigner for API 26+, zipalign, Android 8 and Android 9 emulator installation and launch checks. An official in-place update requires the original production signing key; do not uninstall your official app to install this preview.'
