@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.draw.clip
 import android.widget.TextView
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -176,6 +177,8 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
 
 @Composable private fun WriterEditor(original:ArticleDto?,busy:Boolean,save:(ArticleDto)->Unit,cancel:()->Unit,delete:(String)->Unit){
  var title by rememberSaveable(original?.id){mutableStateOf(original?.title.orEmpty())}
+ var author by rememberSaveable(original?.id){mutableStateOf(original?.author?.ifBlank{"معتز العلقمي"}?:"معتز العلقمي")}
+ var authorImage by rememberSaveable(original?.id){mutableStateOf(original?.authorImage.orEmpty())}
  var slug by rememberSaveable(original?.id){mutableStateOf(original?.slug.orEmpty())}
  var category by rememberSaveable(original?.id){mutableStateOf(original?.category?:"general")}
  var excerpt by rememberSaveable(original?.id){mutableStateOf(original?.excerpt.orEmpty())}
@@ -194,6 +197,13 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)){
   Text(if(original==null)"مقال جديد" else "تعديل المقال",style=MaterialTheme.typography.titleLarge)
   OutlinedTextField(title,{title=it.take(220)},label={Text("العنوان")},modifier=Modifier.fillMaxWidth())
+  OutlinedTextField(author,{author=it.take(150)},label={Text("اسم كاتب المقالة")},modifier=Modifier.fillMaxWidth())
+  OutlinedTextField(authorImage,{authorImage=it.take(2048)},label={Text("رابط صورة الكاتب HTTPS")},modifier=Modifier.fillMaxWidth())
+  if(authorImage.startsWith("https://")){
+   coil.compose.AsyncImage(model=authorImage,contentDescription="صورة الكاتب",
+    modifier=Modifier.size(70.dp).clip(androidx.compose.foundation.shape.CircleShape),
+    contentScale=androidx.compose.ui.layout.ContentScale.Crop)
+  }
   OutlinedTextField(slug,{slug=it.take(150)},label={Text("الرابط الوصفي")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(category,{category=it.take(60)},label={Text("معرّف القسم")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(cover,{cover=it.take(2048)},label={Text("رابط صورة الغلاف HTTPS")},modifier=Modifier.fillMaxWidth())
@@ -210,6 +220,8 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    AssistChip(onClick={content+="\n- عنصر من القائمة\n"},label={Text("قائمة")})
    AssistChip(onClick={content+="[عنوان الرابط](https://example.com)"},label={Text("رابط")})
    AssistChip(onClick={content+="![وصف الصورة](https://example.com/photo.jpg)"},label={Text("صورة")})
+   AssistChip(onClick={content+="![عنوان الفيديو](https://example.com/video.mp4)"},label={Text("فيديو")})
+   AssistChip(onClick={content+="![تسجيل صوتي](https://example.com/audio.mp3)"},label={Text("صوت")})
   }
   Text("خط المقالة",style=MaterialTheme.typography.titleSmall)
   Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(5.dp)){
@@ -243,12 +255,12 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   Row(verticalAlignment=Alignment.CenterVertically){
    Text("مقال مميّز",Modifier.weight(1f));Switch(featured,onCheckedChange={featured=it})
   }
-  val valid=title.isNotBlank()&&content.isNotBlank()&&(cover.isBlank()||cover.startsWith("https://"))
+  val valid=title.isNotBlank()&&content.isNotBlank()&&(cover.isBlank()||cover.startsWith("https://"))&&(authorImage.isBlank()||authorImage.startsWith("https://"))
   fun prepared(status:String):ArticleDto{
    val articleSlug=slug.ifBlank{ "article-"+System.currentTimeMillis() }
    return (original?:ArticleDto()).copy(title=title.trim(),slug=articleSlug,category=category,
     content=content,excerpt=excerpt,coverImage=cover,readTime=readTime,featured=featured,status=status,
-    author=original?.author?.takeIf{it.isNotBlank()} ?: "معتز العلقمي",
+    author=author.trim().ifBlank{"معتز العلقمي"},authorImage=authorImage.trim(),
     publishDate=original?.publishDate?.takeIf{it.isNotBlank()} ?: java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US).format(java.util.Date()),
     tags=tags.split('،',',').map{it.trim()}.filter{it.isNotBlank()},fontFamily=fontFamily,fontSize=fontSize)
   }
