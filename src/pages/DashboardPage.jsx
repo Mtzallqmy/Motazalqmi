@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { BookOpen, Edit3, Eye, Feather, PlusCircle, Quote, Save, Send, Settings, Trash2, Upload, LogOut } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { BookOpen, Edit3, Eye, Feather, PlusCircle, Quote, Save, Send, Settings, Trash2, Upload, LogOut, Link2, Copy, List, Italic, Image, Heading2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useArticles } from '../hooks/useArticles';
 import { ARTICLE_CATEGORIES, getCategory } from '../data/categories';
@@ -8,12 +10,13 @@ import { AUTHOR, DEFAULT_IMAGE, slugify, articlePath } from '../lib/format';
 
 function blankArticle() {
   return { title:'', slug:'', category:'general', excerpt:'', content:'', coverImage:DEFAULT_IMAGE,
-    readTime:'5 دقائق', featured:false, tags:'الأدب العربي, ثقافة' };
+    readTime:'5 دقائق', featured:false, tags:'الأدب العربي, ثقافة', fontFamily:'amiri', fontSize:22 };
 }
 function formFrom(article) {
   return { title: article.title || '', slug:article.slug || '', category:article.category || 'general',
     excerpt:article.excerpt || '', content:article.content || '', coverImage:article.coverImage || DEFAULT_IMAGE,
-    readTime:article.readTime || '5 دقائق', featured:Boolean(article.featured), tags:(article.tags || []).join(', ') };
+    readTime:article.readTime || '5 دقائق', featured:Boolean(article.featured), tags:(article.tags || []).join(', '),
+    fontFamily:article.fontFamily || 'amiri', fontSize:article.fontSize || 22 };
 }
 function localeToday() {
   // local date, avoiding a UTC day rollover when editing in Yemen
@@ -32,6 +35,7 @@ export function DashboardPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [preview, setPreview] = useState(false);
   const editorRef = useRef(null);
 
   useEffect(() => { document.title = 'لوحة الكاتب | مدونة معتز العلقمي'; }, []);
@@ -66,7 +70,7 @@ export function DashboardPage() {
       category: form.category, excerpt: form.excerpt.trim() || content.replace(/[#>*_]/g,'').slice(0,160)+'…',
       content, coverImage: form.coverImage.trim() || DEFAULT_IMAGE, author: old?.author || AUTHOR,
       publishDate: old?.publishDate || localeToday(), readTime:form.readTime.trim() || '5 دقائق',
-      featured:form.featured, status, tags:form.tags.split(/[,،]/).map(t=>t.trim()).filter(Boolean),
+      featured:form.featured, fontFamily:form.fontFamily, fontSize:Number(form.fontSize), status, tags:form.tags.split(/[,،]/).map(t=>t.trim()).filter(Boolean),
       views:old?.views || 0, likes:old?.likes || 0 };
     setBusy(true);
     try { await save(item); clear(); setSuccess(status === 'draft' ? 'حُفظت المسودة في قاعدة البيانات.' : 'نُشرت المقالة بنجاح.'); }
@@ -107,12 +111,34 @@ export function DashboardPage() {
           <label className="block text-sm font-bold">رابط صورة الغلاف<input type="url" dir="ltr" value={form.coverImage} onChange={e=>change('coverImage',e.target.value)} className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream text-left text-sm"/></label>
           {form.coverImage && <img loading="lazy" src={form.coverImage} alt="معاينة غلاف المقالة" className="h-36 w-full object-cover rounded-xl border border-gold/30"/>}
           <label className="block text-sm font-bold">المقتطف التعريفي<textarea rows={3} value={form.excerpt} onChange={e=>change('excerpt',e.target.value)} placeholder="نبذة مختصرة عن المقالة" className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream"/></label>
-          <div><div className="flex flex-wrap items-center justify-between gap-2 mb-2"><label htmlFor="article-content" className="text-sm font-bold">متن المقالة الكامل *</label><div className="flex gap-1 flex-wrap"><button onClick={()=>format('\n\n### ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-teal">عنوان فرعي</button><button onClick={()=>format('\n\n> ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-rust flex items-center gap-1"><Quote size={13}/> اقتباس / شعر</button><button onClick={()=>format('**','**')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">عريض</button><button onClick={()=>format('«','»')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">« »</button></div></div><textarea id="article-content" ref={editorRef} rows={15} value={form.content} onChange={e=>change('content',e.target.value)} placeholder="اكتب المقالة هنا. يدعم المحرر Markdown للعناوين والاقتباسات والنصوص المنسقة…" className="w-full border border-gold/40 rounded-2xl p-4 bg-cream leading-loose"/></div>
+          <div className="rounded-2xl border border-gold/30 bg-cream/70 p-4 space-y-3">
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+              <div><p className="font-bold text-teal">استوديو تحرير النصوص العربية</p><p className="text-xs text-ink/60">معاينة فورية للخط والتنسيق كما سيظهر للقارئ</p></div>
+              <button type="button" onClick={()=>setPreview(v=>!v)} className="rounded-xl bg-teal text-white px-4 py-2 text-sm font-bold flex gap-2 items-center"><Eye size={16}/>{preview?'العودة للكتابة':'معاينة المقالة'}</button>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <label className="text-sm font-bold">نوع الخط
+                <select value={form.fontFamily} onChange={e=>change('fontFamily',e.target.value)} className="block w-full mt-1.5 border border-gold/40 bg-white rounded-xl p-2.5">
+                  <option value="amiri">أميري — أدبي كلاسيكي</option><option value="naskh">نسخ — رسمي وقابل للقراءة</option><option value="tajawal">تجوال — حديث ومتزن</option>
+                </select>
+              </label>
+              <label className="text-sm font-bold">حجم خط المقالة: {form.fontSize} بكسل
+                <input type="range" min="16" max="32" step="1" value={form.fontSize} onChange={e=>change('fontSize',Number(e.target.value))} className="block w-full mt-3 accent-[#0D5C63]" />
+              </label>
+            </div>
+            <p className="text-xs text-ink/60">الكلمات: {form.content.trim()?form.content.trim().split(/\\s+/).length:0} · الحروف: {form.content.length}</p>
+          </div>
+          <div><div className="flex flex-wrap items-center justify-between gap-2 mb-2"><label htmlFor="article-content" className="text-sm font-bold">متن المقالة الكامل *</label><div className="flex gap-1 flex-wrap"><button onClick={()=>format('\n\n### ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-teal">عنوان فرعي</button><button onClick={()=>format('\n\n> ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-rust flex items-center gap-1"><Quote size={13}/> اقتباس / شعر</button><button onClick={()=>format('**','**')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">عريض</button><button onClick={()=>format('«','»')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">« »</button>
+            <button onClick={()=>format('## ')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Heading2 size={13}/> عنوان كبير</button>
+            <button onClick={()=>format('*','*')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Italic size={13}/> مائل</button>
+            <button onClick={()=>format('\n- ')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><List size={13}/> قائمة</button>
+            <button onClick={()=>format('[','](https://example.com)')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Link2 size={13}/> رابط</button>
+            <button onClick={()=>format('![وصف الصورة](',')')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Image size={13}/> صورة</button></div></div><textarea id="article-content" ref={editorRef} rows={15} value={form.content} onChange={e=>change('content',e.target.value)} placeholder="اكتب المقالة هنا. يدعم المحرر Markdown للعناوين والاقتباسات والنصوص المنسقة…" className={`w-full border border-gold/40 rounded-2xl p-4 bg-cream leading-loose ${preview?'hidden':''}`}/>{preview && <div aria-label="معاينة المقال" className="article-prose max-h-[640px] overflow-y-auto rounded-2xl border border-gold/30 bg-white p-6" style={{fontFamily:form.fontFamily==='tajawal'?"'Tajawal',sans-serif":form.fontFamily==='naskh'?"'Noto Naskh Arabic','Amiri',serif":"'Amiri',serif",fontSize:`${form.fontSize}px`}}><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{form.content || 'اكتب نصًا لمعاينته هنا.'}</ReactMarkdown></div>}</div>
           <div className="grid sm:grid-cols-2 gap-4 items-center"><label className="text-sm font-bold">الوسوم (افصل بفاصلة)<input value={form.tags} onChange={e=>change('tags',e.target.value)} className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream"/></label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" className="accent-[#0D5C63] h-4 w-4" checked={form.featured} onChange={e=>change('featured',e.target.checked)}/> إظهار في المقالات المميزة</label></div>
           <div className="flex flex-wrap gap-3 border-t border-gold/20 pt-5"><button disabled={busy} onClick={()=>submit('published')} className="inline-flex items-center gap-2 bg-teal text-white px-6 py-3 rounded-xl text-sm font-bold shadow-sm"><Send size={17}/> نشر المقالة</button><button disabled={busy} onClick={()=>submit('draft')} className="inline-flex items-center gap-2 bg-gold/20 text-rust px-5 py-3 rounded-xl text-sm font-bold"><Save size={17}/> حفظ كمسودة</button>{editingId && <button onClick={clear} className="text-ink/65 underline text-sm">إلغاء التعديل</button>}</div>
         </div>
       </section>
-      <section className="lg:col-span-5 bg-white rounded-3xl border border-gold/40 p-6 shadow-soft" aria-labelledby="manage-title"><div className="flex flex-wrap justify-between gap-2 items-center mb-5"><h2 id="manage-title" className="font-literature text-2xl font-bold">إدارة المنشورات ({articles.length})</h2><div className="flex gap-1 bg-cream p-1 rounded-xl">{[['all','الكل'],['published','منشور'],['draft','مسودات']].map(([id,title])=><button key={id} onClick={()=>setFilter(id)} className={`text-xs font-bold rounded-lg px-2.5 py-1.5 ${filter===id?'bg-teal text-white':''}`}>{title}</button>)}</div></div><div className="space-y-3 max-h-[750px] overflow-y-auto">{filtered.map(article=><div key={article.id} className={`rounded-2xl p-4 border ${editingId===article.id?'border-teal bg-teal/5':'border-gold/30 bg-cream/50'}`}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs text-rust font-bold">{getCategory(article.category).title} · {article.status === 'draft' ? 'مسودة' : 'منشور'}{article.featured?' · مميزة':''}</p><h3 className="font-literature font-bold text-lg line-clamp-2 mt-1">{article.title}</h3><p className="text-xs text-ink/55 mt-1">{article.publishDate} · {article.readTime}</p></div><div className="flex gap-1 shrink-0"><Link to={articlePath(article)} title="معاينة" className="p-2 text-teal rounded-lg hover:bg-teal/10"><Eye size={17}/></Link><button onClick={()=>edit(article)} title="تعديل" className="p-2 text-rust rounded-lg hover:bg-gold/20"><Edit3 size={17}/></button><button onClick={()=>setConfirmDeleteId(article.id)} title="حذف" className="p-2 text-red-700 rounded-lg hover:bg-red-50"><Trash2 size={17}/></button></div></div>{confirmDeleteId===article.id&&<div className="mt-3 pt-3 border-t border-red-200 bg-red-50 rounded-xl p-3 text-sm"><p className="text-red-800 font-bold">حذف هذه المقالة نهائيًا؟</p><div className="flex gap-2 mt-2"><button disabled={busy} onClick={()=>handleDelete(article.id)} className="bg-red-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold">نعم، حذف</button><button onClick={()=>setConfirmDeleteId(null)} className="bg-white border rounded-lg px-3 py-1.5 text-xs">إلغاء</button></div></div>}</div>)}{!filtered.length&&<p className="text-center p-8 text-ink/60"><BookOpen className="mx-auto mb-3 text-gold"/>لا توجد منشورات في هذا التصنيف.</p>}</div></section>
+      <section className="lg:col-span-5 bg-white rounded-3xl border border-gold/40 p-6 shadow-soft" aria-labelledby="manage-title"><div className="flex flex-wrap justify-between gap-2 items-center mb-5"><h2 id="manage-title" className="font-literature text-2xl font-bold">إدارة المنشورات ({articles.length})</h2><div className="flex gap-1 bg-cream p-1 rounded-xl">{[['all','الكل'],['published','منشور'],['draft','مسودات']].map(([id,title])=><button key={id} onClick={()=>setFilter(id)} className={`text-xs font-bold rounded-lg px-2.5 py-1.5 ${filter===id?'bg-teal text-white':''}`}>{title}</button>)}</div></div><div className="space-y-3 max-h-[750px] overflow-y-auto">{filtered.map(article=><div key={article.id} className={`rounded-2xl p-4 border ${editingId===article.id?'border-teal bg-teal/5':'border-gold/30 bg-cream/50'}`}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs text-rust font-bold">{getCategory(article.category).title} · {article.status === 'draft' ? 'مسودة' : 'منشور'}{article.featured?' · مميزة':''}</p><h3 className="font-literature font-bold text-lg line-clamp-2 mt-1">{article.title}</h3><p className="text-xs text-ink/55 mt-1">{article.publishDate} · {article.readTime}</p></div><div className="flex gap-1 shrink-0"><Link to={articlePath(article)} title="معاينة" className="p-2 text-teal rounded-lg hover:bg-teal/10"><Eye size={17}/></Link><button type="button" onClick={async()=>{const url=window.location.origin+articlePath(article);try{await navigator.clipboard.writeText(url);setSuccess('نُسخ رابط المقالة: '+url);}catch{setError('تعذر نسخ الرابط.');}}} title="نسخ الرابط المباشر" className="p-2 text-teal rounded-lg hover:bg-teal/10"><Copy size={17}/></button><button onClick={()=>edit(article)} title="تعديل" className="p-2 text-rust rounded-lg hover:bg-gold/20"><Edit3 size={17}/></button><button onClick={()=>setConfirmDeleteId(article.id)} title="حذف" className="p-2 text-red-700 rounded-lg hover:bg-red-50"><Trash2 size={17}/></button></div></div>{confirmDeleteId===article.id&&<div className="mt-3 pt-3 border-t border-red-200 bg-red-50 rounded-xl p-3 text-sm"><p className="text-red-800 font-bold">حذف هذه المقالة نهائيًا؟</p><div className="flex gap-2 mt-2"><button disabled={busy} onClick={()=>handleDelete(article.id)} className="bg-red-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold">نعم، حذف</button><button onClick={()=>setConfirmDeleteId(null)} className="bg-white border rounded-lg px-3 py-1.5 text-xs">إلغاء</button></div></div>}</div>)}{!filtered.length&&<p className="text-center p-8 text-ink/60"><BookOpen className="mx-auto mb-3 text-gold"/>لا توجد منشورات في هذا التصنيف.</p>}</div></section>
     </div>
   </div>;
 }

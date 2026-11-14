@@ -1,4 +1,4 @@
-import {createContext,useContext,useEffect,useMemo,useState} from 'react';
+import {createContext,useContext,useEffect,useMemo,useState,useCallback} from 'react';
 import {INITIAL_ARTICLES} from '../data/articles';
 import {useAuth} from '../context/AuthContext';
 import {api} from '../lib/api';
@@ -7,15 +7,24 @@ export function ArticlesProvider({children}){
  const {isAdmin,loading:authLoading}=useAuth();
  const [quotes,setQuotes]=useState([]);
  const [articles,setArticles]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[isDemo,setIsDemo]=useState(false);
- const load=async admin=>{
-  setLoading(true);
+ const load=useCallback(async (admin,quiet=false)=>{
+  if(!quiet)setLoading(true);
   try{
    const r=await api(admin?'/api/articles?scope=admin':'/api/articles');
    setArticles(r.articles);setQuotes(r.editorial?.quotes || []);setIsDemo(!r.articles.length);setError('');
-  }catch(e){setArticles([]);setQuotes([]);setIsDemo(true);setError('تعذّر تحميل المقالات من Neon: '+e.message);}
-  finally{setLoading(false);}
- };
- useEffect(()=>{if(!authLoading)load(isAdmin);},[isAdmin,authLoading]);
+  }catch(e){if(!quiet){setArticles([]);setQuotes([]);setIsDemo(true);}setError('تعذّر تحميل المقالات من Neon: '+e.message);}
+  finally{if(!quiet)setLoading(false);}
+ },[]);
+ useEffect(()=>{if(!authLoading)load(isAdmin);},[isAdmin,authLoading,load]);
+ // Refresh promptly after edits from Android/Telegram while preserving browser drafts.
+ useEffect(()=>{
+  if(authLoading)return;
+  const refresh=()=>{if(document.visibilityState==='visible')load(isAdmin,true);};
+  const timer=window.setInterval(refresh,45_000);
+  document.addEventListener('visibilitychange',refresh);
+  window.addEventListener('focus',refresh);
+  return()=>{window.clearInterval(timer);document.removeEventListener('visibilitychange',refresh);window.removeEventListener('focus',refresh);};
+ },[authLoading,isAdmin,load]);
  const save=async article=>{if(!isAdmin)throw new Error('صلاحية المدير مطلوبة.');const r=await api('/api/articles',{method:'POST',body:JSON.stringify({action:'save',article})});await load(true);return r.id;};
  const remove=async id=>{if(!isAdmin)throw new Error('صلاحية المدير مطلوبة.');await api('/api/articles',{method:'POST',body:JSON.stringify({action:'delete',id})});await load(true);};
  const importExamples=async()=>{if(!isAdmin||!isDemo)throw new Error('الاستيراد غير متاح.');await api('/api/articles',{method:'POST',body:JSON.stringify({action:'import',articles:INITIAL_ARTICLES})});await load(true);};

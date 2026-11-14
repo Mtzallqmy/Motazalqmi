@@ -12,7 +12,7 @@ export default async function handler(req,res){
   const sql=database();
   if(req.method==='GET'){
    const list=req.query.scope==='admin'
-      ?await sql`SELECT id,slug,status,publish_date::text,data FROM blog_articles ORDER BY publish_date DESC,updated_at DESC LIMIT 500`
+      ?await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles ORDER BY publish_date DESC,updated_at DESC LIMIT 500`
       :await sql`SELECT id,slug,status,publish_date::text,data FROM blog_articles WHERE status='published' ORDER BY publish_date DESC,updated_at DESC LIMIT 500`;
    return res.status(200).json({articles:list.map(articleRow),editorial:await editorial()});
   }
