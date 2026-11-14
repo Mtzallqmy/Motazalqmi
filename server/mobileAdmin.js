@@ -1,6 +1,6 @@
 // Dedicated Android API: login returns a short-lived bearer token. Browser admin remains on /api/session.
-import {adminReady,fingerprint,noCache,issueMobileAdminToken,validateLogin} from '../../server/auth.js';
-import {database} from '../../server/db.js';
+import {adminReady,fingerprint,noCache,issueMobileAdminToken,validateLogin} from './auth.js';
+import {database} from './db.js';
 export default async function handler(req,res){
  noCache(res);
  res.setHeader('Allow','POST');

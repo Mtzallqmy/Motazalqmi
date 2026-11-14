@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import {strict as assert} from 'node:assert';
 import {randomBytes,scryptSync} from 'node:crypto';
 import {issueMobileAdminToken,getAdmin,getMobileAdmin,checkOrigin} from '../server/auth.js';
-import {imageInventory,createHandler} from '../api/v1/media.js';
+import {imageInventory,createHandler} from '../server/mediaInventory.js';
 
 test('signed native bearer is purpose-bound and cannot be forged',()=>{
  const salt=randomBytes(16).toString('hex'),password='test-password';

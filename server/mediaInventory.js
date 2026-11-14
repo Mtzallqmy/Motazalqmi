@@ -1,5 +1,5 @@
-import {publicGet,sendJson,publicError} from '../../server/publicApi.js';
-import {publishedSnapshot} from '../../server/snapshot.js';
+import {publicGet,sendJson,publicError} from './publicApi.js';
+import {publishedSnapshot} from './snapshot.js';
 
 // A read-only inventory. Remote HTTPS media must be fetched by the client; this
 // endpoint never claims to embed original image bytes in a JSON response.
