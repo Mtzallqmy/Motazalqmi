@@ -31,3 +31,10 @@ test('configuration and versions disclose no fabricated released APK',async()=>{
 test('editorial metadata is read from the same supplied storage source',async()=>{
  for(const key of ['site','sections','quotes']) { const x=fake();await metadataHandler(key,async()=>snapshot)(x.req,x.res);assert.deepEqual(x.res.body[key],snapshot[key]) }
 });
+
+import {createBurstLimiter} from '../server/rateLimit.js';
+test('bounded burst limiter isolates clients and resets its time window',()=>{
+ const allow=createBurstLimiter({limit:2,windowMs:100,maxKeys:2});
+ assert.equal(allow('client-a',0),true);assert.equal(allow('client-a',1),true);assert.equal(allow('client-a',2),false);
+ assert.equal(allow('client-b',3),true);assert.equal(allow('client-a',101),true);
+});

@@ -1,0 +1,108 @@
+{
+  "tested": "2026-11-14",
+  "productionCommit": "b98e00051005e126564d94bf02df315b693a4908",
+  "results": [
+    {
+      "path": "/api/v1/health",
+      "status": 200,
+      "bytes": 47,
+      "apiVersion": 1,
+      "articles": 0,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/bootstrap",
+      "status": 200,
+      "bytes": 17288,
+      "apiVersion": 1,
+      "articles": 7,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/articles?limit=2",
+      "status": 200,
+      "bytes": 1956,
+      "apiVersion": 1,
+      "articles": 2,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/categories",
+      "status": 200,
+      "bytes": 1202,
+      "apiVersion": 1,
+      "articles": 0,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/quotes",
+      "status": 200,
+      "bytes": 898,
+      "apiVersion": 1,
+      "articles": 0,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/android",
+      "status": 200,
+      "bytes": 612,
+      "apiVersion": 1,
+      "articles": 0,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/sync",
+      "status": 200,
+      "bytes": 17396,
+      "apiVersion": 1,
+      "articles": 7,
+      "complete": true,
+      "etagStatus": 304
+    },
+    {
+      "path": "/api/v1/search?q=%D8%A7%D8%A8%D8%AF%D8%A7%D8%B9",
+      "status": 200,
+      "bytes": 156,
+      "apiVersion": 1,
+      "articles": 0,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/featured",
+      "status": 200,
+      "bytes": 2836,
+      "apiVersion": 1,
+      "articles": 3,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/config",
+      "status": 200,
+      "bytes": 237,
+      "apiVersion": 1,
+      "articles": 0,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/versions",
+      "status": 200,
+      "bytes": 123,
+      "apiVersion": 1,
+      "articles": 0,
+      "complete": null
+    },
+    {
+      "path": "/api/v1/articles/imru-al-qais-poetic-imagery",
+      "status": 200,
+      "bytes": 2892,
+      "apiVersion": 1,
+      "articles": 0,
+      "complete": null
+    },
+    {
+      "path": "/",
+      "status": 200,
+      "bytes": 775
+    }
+  ]
+}

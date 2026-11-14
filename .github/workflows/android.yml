@@ -23,10 +23,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Use installed SDK manager
+      - name: Install Android platform using runner SDK
+        shell: bash
         run: |
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          set -euo pipefail
+          SDK_MANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          "$SDK_MANAGER" 'platforms;android-35' 'build-tools;35.0.0' 
       - name: Compile, unit tests, lint and unsigned Release
         run: gradle -p android :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon
       - name: Upload verification outputs
@@ -111,9 +113,13 @@ jobs:
           api-level: ${{ matrix.api }}
           arch: x86_64
           disable-animations: true
-          script: gradle -p android connectedDebugAndroidTest --no-daemon
+          script: |
+            gradle -p android connectedDebugAndroidTest -PtestAbi=x86_64 --no-daemon
+            adb pull /sdcard/Android/data/com.moataz.motazalqmi/files/screenshots android/device-screenshots || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Device-tests-API-${{ matrix.api }}
-          path: android/app/build/reports/androidTests/
+          path: |
+            android/app/build/reports/androidTests/
+            android/device-screenshots/
