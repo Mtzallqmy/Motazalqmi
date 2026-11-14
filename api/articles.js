@@ -17,6 +17,24 @@ export default async function handler(req,res){
    return res.status(200).json({articles:list.map(articleRow),editorial:await editorial()});
   }
   if(JSON.stringify(req.body||'').length>240000)return res.status(413).json({error:'المقالة تتجاوز الحد المسموح.'});
+  if(req.body.action==='editorial'){
+   const input=req.body.editorial;
+   if(!input||typeof input!=='object'||Array.isArray(input))return res.status(400).json({error:'إعدادات غير صالحة.'});
+   const current=await editorial();
+   const tagline=input.tagline,about=input.about;
+   if(typeof tagline!=='string'||tagline.trim().length<3||tagline.length>240||
+      typeof about!=='string'||about.trim().length<10||about.length>12000)
+    return res.status(400).json({error:'وصف المدونة أو نبذتها غير صالح.'});
+   if(!Array.isArray(input.quotes)||input.quotes.length>40||
+      !input.quotes.every(q=>q&&typeof q.text==='string'&&q.text.trim()&&q.text.length<=1200&&
+       typeof q.author==='string'&&q.author.length<=160&&typeof q.source==='string'&&q.source.length<=160))
+    return res.status(400).json({error:'صيغة الاقتباسات غير صالحة.'});
+   const value=JSON.stringify({...current,site:{...current.site,tagline:tagline.trim(),about:about.trim()},
+    quotes:input.quotes.map(q=>({text:q.text.trim(),author:q.author.trim(),source:q.source.trim()}))});
+   await sql`INSERT INTO blog_public_metadata(id,data) VALUES ('editorial',${value}::jsonb)
+     ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()`;
+   return res.status(200).json({ok:true});
+  }
   if(req.body.action==='save'){
    const a=normalizeArticle(req.body.article),id=a.id||'art-'+randomUUID(),data=JSON.stringify({...a,id});
    await sql`INSERT INTO blog_articles(id,slug,status,publish_date,data) VALUES (${id},${a.slug},${a.status},${a.publishDate}::date,${data}::jsonb)

@@ -25,7 +25,7 @@ function localeToday() {
 }
 
 export function DashboardPage() {
-  const { articles, save, remove, isDemo, importExamples } = useArticles();
+  const { articles, save, remove, isDemo, importExamples, site, quotes, saveEditorial } = useArticles();
   const { logout, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [editingId, setEditingId] = useState(null);
@@ -36,6 +36,17 @@ export function DashboardPage() {
   const [success, setSuccess] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [preview, setPreview] = useState(false);
+  const [editorialOpen,setEditorialOpen] = useState(false);
+  const [editorialForm,setEditorialForm] = useState(null);
+  const openEditorial=()=>{setEditorialForm({tagline:site.tagline||'',about:site.about||'',
+    quotes:quotes.map(q=>({text:q.text||'',author:q.author||'',source:q.source||''}))});setEditorialOpen(true);};
+  const changeQuote=(i,key,value)=>setEditorialForm(f=>({...f,quotes:f.quotes.map((q,j)=>j===i?{...q,[key]:value}:q)}));
+  const commitEditorial=async()=>{
+   setBusy(true);setError('');setSuccess('');
+   try{await saveEditorial(editorialForm.tagline,editorialForm.about,editorialForm.quotes);
+    setEditorialOpen(false);setSuccess('حُفظت هوية المدونة واقتباساتها في Neon.');}
+   catch(e){setError(e.message||'تعذّر حفظ إعدادات المدونة.');}finally{setBusy(false);}
+  };
   const editorRef = useRef(null);
 
   useEffect(() => { document.title = 'لوحة الكاتب | مدونة معتز العلقمي'; }, []);
@@ -93,11 +104,30 @@ export function DashboardPage() {
   return <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
     <header className="rounded-3xl bg-gradient-to-l from-ink via-[#2C2523] to-teal text-white p-7 sm:p-9 shadow-xl flex flex-wrap items-center justify-between gap-4">
       <div><p className="text-gold text-xs font-bold flex gap-2 items-center"><Settings size={17}/> نظام إدارة المحتوى الآمن</p><h1 className="font-literature text-3xl sm:text-4xl font-bold mt-2">لوحة الكاتب</h1><p className="text-white/70 text-sm mt-2">مرحبًا، {user?.email || 'أيها الكاتب'} — تحرير المقالات والمسودات ونشرها</p></div>
-      <div className="flex flex-wrap gap-2"><button onClick={clear} className="bg-gold text-ink px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><PlusCircle size={17}/> مقالة جديدة</button><Link to="/" className="bg-white/15 px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><Eye size={17}/> معاينة</Link><button onClick={logout} className="border border-white/40 px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><LogOut size={17}/> خروج</button></div>
+      <div className="flex flex-wrap gap-2"><button onClick={clear} className="bg-gold text-ink px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><PlusCircle size={17}/> مقالة جديدة</button><Link to="/" className="bg-white/15 px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><Eye size={17}/> معاينة</Link><button onClick={openEditorial} className="bg-white/15 px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><Settings size={17}/> إدارة المدونة</button><button onClick={logout} className="border border-white/40 px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2"><LogOut size={17}/> خروج</button></div>
     </header>
     {isDemo && <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#F4ECE1] border border-gold/40 p-5"><p className="text-sm">المقالات الحالية أمثلة تجريبية. استوردها إلى Neon إن رغبت في إدارتها، أو ابدأ بكتابة مقالة جديدة.</p><button disabled={busy} onClick={handleImport} className="bg-teal text-white rounded-xl px-5 py-2.5 font-bold text-sm inline-flex items-center gap-2"><Upload size={17}/> استيراد الأمثلة السبعة</button></div>}
     {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 text-red-800 border border-red-200 p-4">{error}</p>}
     {success && <p role="status" className="mt-5 rounded-xl bg-cream text-teal border border-gold/30 p-4">{success}</p>}
+    {editorialOpen && editorialForm && <section className="mt-6 rounded-3xl bg-white border border-gold/40 p-6 sm:p-8 shadow-soft">
+      <div className="flex justify-between items-center gap-3"><h2 className="font-literature text-2xl font-bold text-teal">إدارة هوية المدونة والاقتباسات</h2><button type="button" className="text-rust underline text-sm" onClick={()=>setEditorialOpen(false)}>إغلاق</button></div>
+      <div className="grid gap-4 mt-5">
+        <label className="text-sm font-bold">العبارة التعريفية للمدونة
+          <input value={editorialForm.tagline} maxLength={240} onChange={e=>setEditorialForm(f=>({...f,tagline:e.target.value}))} className="w-full block mt-2 p-3 rounded-xl bg-cream border border-gold/40"/>
+        </label>
+        <label className="text-sm font-bold">نبذة «حول المدونة»
+          <textarea rows={5} value={editorialForm.about} maxLength={12000} onChange={e=>setEditorialForm(f=>({...f,about:e.target.value}))} className="w-full block mt-2 p-3 rounded-xl bg-cream border border-gold/40 leading-loose"/>
+        </label>
+        <div className="flex items-center justify-between"><h3 className="font-bold text-teal">الاقتباسات ({editorialForm.quotes.length})</h3><button type="button" className="bg-teal text-white px-3 py-2 rounded-xl text-sm" onClick={()=>setEditorialForm(f=>({...f,quotes:[...f.quotes,{text:'',author:'',source:''}]}))}>إضافة اقتباس</button></div>
+        <div className="grid md:grid-cols-2 gap-4">{editorialForm.quotes.map((q,i)=><div key={i} className="rounded-xl bg-cream p-4 border border-gold/30 space-y-3">
+          <label className="block text-xs font-bold">نص الاقتباس<textarea rows={3} maxLength={1200} value={q.text} onChange={e=>changeQuote(i,'text',e.target.value)} className="w-full mt-1 p-2 rounded-lg border bg-white"/></label>
+          <label className="block text-xs font-bold">القائل<input maxLength={160} value={q.author} onChange={e=>changeQuote(i,'author',e.target.value)} className="w-full mt-1 p-2 rounded-lg border bg-white"/></label>
+          <label className="block text-xs font-bold">المصدر<input maxLength={160} value={q.source} onChange={e=>changeQuote(i,'source',e.target.value)} className="w-full mt-1 p-2 rounded-lg border bg-white"/></label>
+          <button type="button" className="text-red-700 text-xs font-bold" onClick={()=>setEditorialForm(f=>({...f,quotes:f.quotes.filter((_,j)=>j!==i)}))}>إزالة الاقتباس من القائمة</button>
+        </div>)}</div>
+        <div><button disabled={busy} onClick={commitEditorial} className="inline-flex items-center gap-2 bg-teal text-white px-6 py-3 rounded-xl font-bold"><Save size={17}/> حفظ إعدادات المدونة</button></div>
+      </div>
+    </section>}
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8 items-start">
       <section className="lg:col-span-7 rounded-3xl bg-white p-6 sm:p-8 border border-gold/40 shadow-soft" aria-labelledby="editor-title">
         <h2 id="editor-title" className="font-literature text-2xl font-bold text-teal flex items-center gap-2 mb-6"><Edit3 size={21} className="text-gold"/>{editingId ? 'تعديل المقالة' : 'كتابة مقالة جديدة'}</h2>
