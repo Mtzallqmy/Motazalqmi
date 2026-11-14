@@ -49,3 +49,35 @@ Sections, quotes and site metadata are read from `blog_public_metadata` by both 
 Server secrets stay in Vercel. Android connects only over HTTPS to the public API. Vercel manages response compression; ETags and CDN cache headers are set by handlers. API errors retain a string `error` for backward compatibility with additional `apiVersion`/`code` where applicable.
 
 Public handlers also apply bounded per-instance burst protection (120 requests per minute per address, 429 with Retry-After). This is not a globally coordinated quota across serverless instances. Strong distributed abuse protection should be configured at the Vercel perimeter for the actual traffic profile.
+
+
+## Android 2.1 — images and protected writer access
+
+The published Android reader requests `GET /api/v1/sync` for complete current text and metadata. The new public
+`GET /api/v1/media` returns all unique HTTPS image URLs used by published article covers and Markdown body images:
+
+```json
+{"apiVersion":1,"media":[{"url":"https://example.org/cover.jpg","kind":"cover","articleId":"seed-1","slug":"example"}],"total":1,"downloadRequired":true}
+```
+
+Images are **not** binary-embedded in the JSON. Coil downloads them on Android, with a private persistent offline cache.
+Source images are currently hosted at external HTTPS origins and may become unavailable; a permanent upload/storage
+solution is a separate capability. The public media list excludes drafts.
+
+Writer access is deliberately separated from public reader data:
+
+1. `POST /api/v1/mobile-admin` with JSON `{"email":"...","password":"..."}`, over HTTPS.
+2. The response provides a signed, purpose-bound **two-hour** `accessToken`. Save it in volatile Android memory
+   only; never embed it in APK, Git or telemetry.
+3. `GET /api/articles?scope=admin` with `Authorization: Bearer <accessToken>` lists drafts and published posts.
+4. `POST /api/articles` with the same bearer and JSON `{"action":"save","article":{...}}` or
+   `{"action":"delete","id":"..."}` performs writer actions after server authorization.
+5. Discard the token at logout; expired sessions require sign-in. The existing browser cookie flow at
+   `/api/session` and same-origin protection remain unchanged.
+
+Admin API endpoints must never appear in public, unauthenticated snapshots. Password hashing, rate limiting and
+permission enforcement remain on the Vercel server. On the Hobby plan, media and mobile-admin share the existing
+`/api/v1/[resource]` dynamic function; do not re-add standalone handlers that exceed the 12-function deployment limit.
+
+Website React/CSS visual components are not serializable through a JSON API. Android implements native
+counterparts and shares the site name, tagline, about text, article content, sections, quotes and image references.
