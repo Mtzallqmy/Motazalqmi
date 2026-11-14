@@ -1,0 +1,70 @@
+name: Android Native ARM64 APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install Android SDK, NDK and CMake
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Build installable 64-bit debug APK
+        run: gradle -p android :app:assembleDebug --no-daemon --stacktrace
+      - name: Verify built APK has ARM64 native library
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -l android/app/build/outputs/apk/debug/app-debug.apk | grep -F 'lib/arm64-v8a/libmotaz_native.so'
+          if unzip -Z1 android/app/build/outputs/apk/debug/app-debug.apk | grep -Eq 'lib/(armeabi|armeabi-v7a|x86|x86_64)/'; then
+            echo 'Unexpected non-arm64 native library!' >&2
+            exit 1
+          fi
+      - name: Upload installable ARM64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motazalqmi-Android8Plus-ARM64-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Prepare protected production signing, when configured
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "${RUNNER_TEMP}/motazalqmi-release.jks"
+            echo 'SIGNING_READY=yes' >> "$GITHUB_ENV"
+          fi
+      - name: Build production release with persistent signing key
+        if: ${{ env.SIGNING_READY == 'yes' }}
+        run: gradle -p android :app:assembleRelease --no-daemon
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/motazalqmi-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Upload signed production APK
+        if: ${{ env.SIGNING_READY == 'yes' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motazalqmi-ARM64-Production-Signed-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
