@@ -1,0 +1,4 @@
+-keepattributes Signature
+-keepattributes *Annotation*
+-keep class com.moataz.motazalqmi.data.**Dto { *; }
+-keep class com.moataz.motazalqmi.data.Snapshot { *; }
