@@ -32,7 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.moataz.motazalqmi.R
 import com.moataz.motazalqmi.BuildConfig
 import com.moataz.motazalqmi.data.*
@@ -60,7 +60,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
   }
  }
  Scaffold(snackbarHost = { SnackbarHost(snackbar) }, bottomBar = {
-  if (!route.startsWith("article")) NavigationBar {
+  if (!route.startsWith("article") && route != "writer") NavigationBar {
    tabs.forEachIndexed { index, (path, title) -> NavigationBarItem(selected = route == path,
     onClick = { nav.navigate(path) { popUpTo("home") { saveState = true }; launchSingleTop = true; restoreState = true } },
     icon = { Icon(listOf(Icons.Default.Home, Icons.Default.Search, Icons.Default.Bookmarks, Icons.Default.Settings)[index], title) }, label = { Text(title) }) }
@@ -80,7 +80,8 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
    }
    composable("search") { Search(library, settings) { nav.navigate("article/${Uri.encode(it)}") } }
    composable("saved") { Saved(library, settings, vm::save) { nav.navigate("article/${Uri.encode(it)}") } }
-   composable("settings") { SettingsPage(settings, library.syncedAt, busy, vm::configure, vm::sync, vm::clean, { nav.navigate("section/about") }) }
+   composable("settings") { SettingsPage(settings, library.syncedAt, busy, vm::configure, vm::sync, vm::clean, { nav.navigate("section/about") }, { nav.navigate("writer") }) }
+   composable("writer") { val writer = androidx.hilt.navigation.compose.hiltViewModel<WriterViewModel>(); WriterPanel(writer) { nav.popBackStack() } }
    composable("article/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
     val id = entry.arguments?.getString("id").orEmpty()
     val article = library.articles.find { it.id == id }
@@ -101,12 +102,12 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
  val published = library.articles.filter { it.id in library.available }
  LazyColumn(Modifier.fillMaxSize().testTag("home-feed"), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
   item { Row(verticalAlignment = Alignment.CenterVertically) {
-   Column(Modifier.weight(1f)) { Text("مكتبة الكلمة والفكرة", color = MaterialTheme.colorScheme.secondary); Title("مدونة معتز العلقمي") }
+   Column(Modifier.weight(1f)) { Text("مكتبة الكلمة والفكرة", color = MaterialTheme.colorScheme.secondary); Title(library.siteName) }
    IconButton(onClick = sync, enabled = !busy) { Icon(Icons.Default.Sync, "تحديث المحتوى") }
   } }
   item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(24.dp)) {
    Column(Modifier.padding(26.dp)) { Text("أهلًا بك في رحاب الكلمة", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimary)
-    Text("حيث تلتقي الكلمة بالفكر، ويزهر الأدب", Modifier.padding(top = 12.dp), fontFamily = Amiri, fontSize = 23.sp, color = MaterialTheme.colorScheme.onPrimary) }
+    Text(library.tagline, Modifier.padding(top = 12.dp), fontFamily = Amiri, fontSize = 23.sp, color = MaterialTheme.colorScheme.onPrimary) }
   } }
   if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
   item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(library.sections, key = { it.id }) { c ->
@@ -134,8 +135,13 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
  val context = LocalContext.current
  val cm = context.getSystemService(ConnectivityManager::class.java)
  val wifi = cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
- if (url.startsWith("https://")) AsyncImage(model = coil.request.ImageRequest.Builder(context).data(url)
-  .networkCachePolicy(if (settings.wifiImages && !wifi) coil.request.CachePolicy.DISABLED else coil.request.CachePolicy.ENABLED).build(), contentDescription = "صورة غلاف المقال", modifier = Modifier.fillMaxWidth().height(180.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+ if (url.startsWith("https://")) SubcomposeAsyncImage(model = coil.request.ImageRequest.Builder(context).data(url)
+  .networkCachePolicy(if (settings.wifiImages && !wifi) coil.request.CachePolicy.DISABLED else coil.request.CachePolicy.ENABLED)
+  .diskCachePolicy(coil.request.CachePolicy.ENABLED).build(),
+  contentDescription = "صورة من المقال", modifier = Modifier.fillMaxWidth().height(180.dp),
+  contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+  loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(30.dp)) } },
+  error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("تعذر عرض الصورة. جرّب اتصالًا آخر.") } })
 }
 @Composable private fun ArticleList(articles: List<ArticleDto>, settings: ReadingSettings, title: String, open: (String) -> Unit) {
  LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -249,18 +255,31 @@ private fun share(context: android.content.Context, text: String) {
    Text("${a.author}  ·  ${a.publishDate}  ·  $minutes دقائق قراءة", style = MaterialTheme.typography.bodyMedium)
    Spacer(Modifier.height(20.dp)); Cover(a.coverImage, settings); Spacer(Modifier.height(22.dp))
    if (rendered == null) CircularProgressIndicator()
-   AndroidView(factory = { TextView(it).apply {
-    textDirection = android.view.View.TEXT_DIRECTION_FIRST_STRONG_RTL
-    layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
-    setTextIsSelectable(true)
-    movementMethod = android.text.method.LinkMovementMethod.getInstance()
-   } }, modifier = Modifier.fillMaxWidth(), update = { view ->
-    view.setTextColor(ink); view.setLinkTextColor(MaterialColors.link)
-    view.typeface = ResourcesCompat.getFont(context, fontId) ?: Typeface.DEFAULT
-    view.textSize = settings.size
-    view.setLineSpacing(0f, settings.spacing)
-    if (rendered != null && view.tag !== rendered) { engine.renderer.setParsedMarkdown(view, rendered!!); view.tag = rendered }
-   })
+   // Render image blocks at the exact position they appear in the article.
+   // The original TextView-only Markwon renderer silently omitted Markdown image bytes.
+   splitMarkdownMedia(a.content).forEachIndexed { index, part ->
+    key(index) {
+     if (part.imageUrl != null) {
+      Cover(part.imageUrl, settings)
+      Spacer(Modifier.height(14.dp))
+     } else if (!part.text.isNullOrBlank()) {
+      val partContent = part.text
+      val parsed = remember(partContent) { engine.renderer.render(engine.renderer.parse(partContent)) }
+      AndroidView(factory = { TextView(it).apply {
+       textDirection = android.view.View.TEXT_DIRECTION_FIRST_STRONG_RTL
+       layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+       setTextIsSelectable(true)
+       movementMethod = android.text.method.LinkMovementMethod.getInstance()
+      } }, modifier = Modifier.fillMaxWidth(), update = { view ->
+       view.setTextColor(ink); view.setLinkTextColor(MaterialColors.link)
+       view.typeface = ResourcesCompat.getFont(context, fontId) ?: Typeface.DEFAULT
+       view.textSize = settings.size
+       view.setLineSpacing(0f, settings.spacing)
+       if (view.tag !== parsed) { engine.renderer.setParsedMarkdown(view, parsed); view.tag = parsed }
+      })
+     }
+    }
+   }
    Spacer(Modifier.height(30.dp))
    val published = library.articles.filter { it.id in library.available }; val index = published.indexOfFirst { it.id == a.id }
    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -272,7 +291,7 @@ private fun share(context: android.content.Context, text: String) {
  }
 }
 private object MaterialColors { val link = android.graphics.Color.rgb(104, 142, 113) }
-@Composable private fun SettingsPage(settings: ReadingSettings, syncedAt: Long, busy: Boolean, change: (ReadingSettings) -> Unit, sync: () -> Unit, clean: () -> Unit, about: () -> Unit) {
+@Composable private fun SettingsPage(settings: ReadingSettings, syncedAt: Long, busy: Boolean, change: (ReadingSettings) -> Unit, sync: () -> Unit, clean: () -> Unit, about: () -> Unit, writer: () -> Unit) {
  var confirm by remember { mutableStateOf(false) }
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
   Title("على مهلٍ… كما تحب")
@@ -292,9 +311,10 @@ private object MaterialColors { val link = android.graphics.Color.rgb(104, 142, 
   Text("يتحقق التطبيق في الخلفية دوريًا عند توفر الاتصال والبطارية المناسبة. قد يؤخر النظام التنفيذ.", style = MaterialTheme.typography.bodyMedium)
   OutlinedButton({ confirm = true }) { Text("تنظيف المحتوى غير المحفوظ والصور المؤقتة") }
   TextButton(about) { Text("حول المدونة والتطبيق") }
+  OutlinedButton(onClick = writer) { Icon(Icons.Default.Edit, null); Text("لوحة الكاتب — إدارة المقالات") }
   Text("الإصدار ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) • Android 8+")
   Title("سياسة الخصوصية")
-  Text("تُحفظ المحفوظات وسجل القراءة والإعدادات على جهازك. لا يطلب التطبيق جهات الاتصال أو الموقع. تُرسل طلبات قراءة المحتوى إلى الموقع الرسمي عبر HTTPS، وقد تحتفظ الاستضافة بسجلات الاتصال المعتادة. تُحمّل أغلفة المقالات من روابطها الخارجية وفق إعداد Wi-Fi. لا يضم التطبيق أدوات إعلانات أو تحليلات أو تسجيل دخول للكاتب.", lineHeight = 28.sp)
+  Text("تُحفظ المحفوظات وسجل القراءة والإعدادات على جهازك. لا يطلب التطبيق جهات الاتصال أو الموقع. تُرسل طلبات قراءة المحتوى إلى الموقع الرسمي عبر HTTPS، وقد تحتفظ الاستضافة بسجلات الاتصال المعتادة. تُحمّل أغلفة المقالات من روابطها الخارجية وفق إعداد Wi-Fi. لا يضم التطبيق أدوات إعلانات أو تحليلات. لوحة الكاتب تتطلب مصادقة مستقلة وآمنة.", lineHeight = 28.sp)
  }
  if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("تنظيف التخزين المحلي؟") }, text = { Text("ستبقى المقالات المحفوظة والإعدادات وسجل القراءة. يمكن جلب بقية المقالات بالمزامنة مجددًا.") }, confirmButton = { TextButton({ clean(); confirm = false }) { Text("تنظيف") } }, dismissButton = { TextButton({ confirm = false }) { Text("إلغاء") } })
 }

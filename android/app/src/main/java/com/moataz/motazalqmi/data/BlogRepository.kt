@@ -1,6 +1,11 @@
 package com.moataz.motazalqmi.data
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.CachePolicy
 import androidx.room.withTransaction
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -18,7 +23,8 @@ import javax.inject.Singleton
 interface BlogApi { @GET("api/v1/sync") suspend fun snapshot(): Snapshot }
 data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map<String, ReaderState> = emptyMap(),
  val sections: List<SectionDto> = emptyList(), val quotes: List<QuoteDto> = emptyList(),
- val available: Set<String> = emptySet(), val syncedAt: Long = 0, val about: String = "")
+ val available: Set<String> = emptySet(), val syncedAt: Long = 0, val about: String = "",
+ val siteName: String = "مدونة معتز العلقمي", val tagline: String = "حيث تلتقي الكلمة بالفكر، ويزهر الأدب")
 
 @Singleton class BlogRepository @Inject constructor(
  private val db: BlogDatabase, private val api: BlogApi, private val gson: Gson,
@@ -35,7 +41,8 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
    (parseList<QuoteDto>(m["quotes"]) + metadata.filter { m -> m.key.startsWith("saved_quote:") && states.any { it.id == m.key.removePrefix("saved_quote:") && it.saved } }
     .mapNotNull { runCatching { gson.fromJson(it.payload, QuoteDto::class.java) }.getOrNull() }).distinctBy { quoteId(it) },
    rows.filter { it.available }.map { it.id }.toSet(), m["synced_at"]?.toLongOrNull() ?: 0,
-   m["about"] ?: "")
+   m["about"] ?: "", m["site_name"] ?: "مدونة معتز العلقمي",
+   m["tagline"] ?: "حيث تلتقي الكلمة بالفكر، ويزهر الأدب")
  }
  private inline fun <reified T> parseList(raw: String?): List<T> = runCatching {
   gson.fromJson<List<T>>(raw ?: "[]", object : TypeToken<List<T>>() {}.type)
@@ -67,11 +74,33 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
    dao.retireAll()
    dao.putArticles(s.articles.map { ArticleEntity(it.id, gson.toJson(it)) })
    dao.putMetadata(listOf(Metadata("sections", gson.toJson(s.sections)), Metadata("quotes", gson.toJson(s.quotes)),
-    Metadata("about", s.site["about"]?.toString() ?: "")) +
+    Metadata("about", s.site["about"]?.toString() ?: ""),
+    Metadata("site_name", s.site["name"]?.toString() ?: "مدونة معتز العلقمي"),
+    Metadata("tagline", s.site["tagline"]?.toString() ?: "")) +
     if (network) listOf(Metadata("synced_at", System.currentTimeMillis().toString())) else emptyList())
    dao.prune()
   }
  }
+
+ /** Prefetch published cover and Markdown images to a persistent private Coil disk cache.
+  * Background work observes the user's Wi-Fi preference; failures never erase articles. */
+ suspend fun prefetchImages(wifiOnly:Boolean) = withContext(Dispatchers.IO) {
+  val cm=context.getSystemService(ConnectivityManager::class.java)
+  val wifi=cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)==true
+  if(wifiOnly&&!wifi)return@withContext
+  val current=dao.articles().first().filter { it.available }.mapNotNull {
+   runCatching { gson.fromJson(it.payload,ArticleDto::class.java) }.getOrNull()
+  }
+  val rx=Regex("""!\[[^\]]{0,300}]\(\s*<?(https://[^)\s>]+)>?(?:\s+["'][^"']*["'])?\s*\)""")
+  val urls=current.flatMap { a -> listOf(a.coverImage)+rx.findAll(a.content).map { it.groupValues[1] }.toList() }
+   .filter { it.startsWith("https://")&&it.length<=2048 }.distinct().take(120)
+  val loader=context.imageLoader
+  for(url in urls){
+   runCatching { loader.execute(ImageRequest.Builder(context).data(url).size(720,480)
+    .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.ENABLED).build()) }
+  }
+ }
+
  suspend fun toggleSaved(id: String) = mutex.withLock {
   val state = dao.state(id) ?: ReaderState(id)
   if (!state.saved && id.startsWith("quote:")) {
@@ -87,6 +116,6 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
   dao.putState(state.copy(block = block, offset = offset, progress = value.coerceIn(0f, 1f), openedAt = System.currentTimeMillis()))
  }
  suspend fun cleanCache() = withContext(Dispatchers.IO) { mutex.withLock {
-  dao.clearUnsaved(); File(context.cacheDir, "image_cache").deleteRecursively()
+  dao.clearUnsaved(); context.imageLoader.diskCache?.clear()
  } }
 }

@@ -2,6 +2,10 @@ package com.moataz.motazalqmi
 
 import android.app.Application
 import android.content.Context
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import java.io.File
 import androidx.room.Room
 import androidx.work.*
 import com.google.gson.Gson
@@ -19,7 +23,11 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
-@HiltAndroidApp class BlogApplication : Application() {
+@HiltAndroidApp class BlogApplication : Application(), ImageLoaderFactory {
+ override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+  .crossfade(true)
+  .diskCache { DiskCache.Builder().directory(File(filesDir, "offline-images")).maxSizeBytes(150L * 1024L * 1024L).build() }
+  .build()
  override fun onCreate() {
   super.onCreate()
   val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).setRequiresBatteryNotLow(true).build()
@@ -31,6 +39,9 @@ import javax.inject.Singleton
 @Module @InstallIn(SingletonComponent::class) object Services {
  @Provides @Singleton fun gson() = Gson()
  @Provides @Singleton fun database(@ApplicationContext context: Context) = Room.databaseBuilder(context, BlogDatabase::class.java, "blog-reader-v2.db").build()
+ @Provides @Singleton fun writerApi(gson: Gson): com.moataz.motazalqmi.ui.WriterApi = Retrofit.Builder()
+  .baseUrl("https://motazalqmi.vercel.app/").addConverterFactory(GsonConverterFactory.create(gson))
+  .build().create(com.moataz.motazalqmi.ui.WriterApi::class.java)
  @Provides @Singleton fun api(gson: Gson): BlogApi {
   val client = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
    .followRedirects(false).followSslRedirects(false).addInterceptor { chain ->
@@ -46,7 +57,7 @@ import javax.inject.Singleton
 class SyncWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
  override suspend fun doWork(): Result {
   val repository = dagger.hilt.android.EntryPointAccessors.fromApplication(applicationContext, WorkerDependencies::class.java).repository()
-  return try { repository.initialize(); repository.sync(); Result.success() }
+  return try { repository.initialize(); repository.sync(); repository.prefetchImages(true); Result.success() }
   catch (e: CancellationException) { throw e }
   catch (_: Exception) { if (runAttemptCount < 5) Result.retry() else Result.failure() }
  }
