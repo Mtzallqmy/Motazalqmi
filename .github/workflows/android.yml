@@ -33,7 +33,7 @@ jobs:
           SDK_MANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
           "$SDK_MANAGER" 'platforms;android-35' 'build-tools;35.0.0' 
       - name: Compile, unit tests, lint and unsigned Release
-        run: gradle -p android :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon
+        run: gradle -p android :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon -PmotazArm64Only=true
       - name: Verify the generated debug APK before publishing
         shell: bash
         run: |
@@ -44,6 +44,115 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > android/debug-package.txt
           grep -F "package: name='com.moataz.motazalqmi'" android/debug-package.txt
           grep -F "sdkVersion:'26'" android/debug-package.txt
+          unzip -Z1 "$APK" > android/debug-apk-file-list.txt
+          grep -E '^lib/arm64-v8a/.*[.]so
+      - name: Publish directly installable debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motazalqmi-v2-ARM64-Only-Debug-APK
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/debug-package.txt
+            android/DEBUG-SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload verification outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motazalqmi-v2-Verification
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/release/*unsigned.apk
+            android/app/build/reports/
+          retention-days: 14
+      - name: Check protected signing configuration
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$KEYSTORE_BASE64" && -n "$STORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]]; then
+            umask 077
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            echo 'SIGNING_READY=yes' >> "$GITHUB_ENV"
+          else
+            echo 'Release signing secrets are absent; unsigned output is not a distribution release.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Build signed Release
+        if: env.SIGNING_READY == 'yes' && github.event_name != 'pull_request'
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle -p android :app:assembleRelease --no-daemon
+      - name: Verify Release signature and package
+        if: env.SIGNING_READY == 'yes' && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee android/signature.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee android/package.txt
+          grep -F "package: name='com.moataz.motazalqmi'" android/package.txt
+          grep -F "sdkVersion:'26'" android/package.txt
+          if unzip -Z1 "$APK" | grep -Eq 'lib/(armeabi|armeabi-v7a|x86|x86_64)/'; then exit 1; fi
+          sha256sum "$APK" > android/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: env.SIGNING_READY == 'yes' && github.event_name != 'pull_request'
+        with:
+          name: Motazalqmi-v2-Signed-Release
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/signature.txt
+            android/package.txt
+            android/SHA256SUMS
+      - if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+  device-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 29]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          disable-animations: true
+          script: |
+            gradle -p android connectedDebugAndroidTest -PtestAbi=x86_64 --no-daemon
+            adb pull /sdcard/Android/data/com.moataz.motazalqmi/files/screenshots android/device-screenshots || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Device-tests-API-${{ matrix.api }}
+          path: |
+            android/app/build/reports/androidTests/
+            android/device-screenshots/
+ android/debug-apk-file-list.txt
+          if grep -Eq '^lib/(armeabi|armeabi-v7a|x86|x86_64)/' android/debug-apk-file-list.txt; then
+            echo 'Debug APK contains non-arm64 native libraries; refusing upload.' >&2
+            exit 1
+          fi
           sha256sum "$APK" > android/DEBUG-SHA256SUMS
       - name: Publish directly installable debug APK
         uses: actions/upload-artifact@v4

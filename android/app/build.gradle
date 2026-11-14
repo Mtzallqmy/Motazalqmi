@@ -12,6 +12,11 @@ android {
   applicationId 'com.moataz.motazalqmi'
   minSdk 26
   targetSdk 35
+  // Build a downloadable ARM64-only Debug APK without restricting x86 emulator tests.
+  // The normal Debug variant remains cross-architecture for CI device tests.
+  if (project.findProperty('motazArm64Only') == 'true') {
+   ndk { abiFilters 'arm64-v8a' }
+  }
   versionCode 20000
   versionName '2.0.0'
   testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
