@@ -1,5 +1,5 @@
 import mobileAdminHandler from '../../server/mobileAdmin.js';
-import {createHandler as createMediaHandler} from '../../server/mediaInventory.js';
+import {createHandler as createMediaHandler,imageHandler} from '../../server/mediaInventory.js';
 const mediaHandler=createMediaHandler();
 import { publicGet, sendJson, publicError, listPublished, param, boundedInt } from '../../server/publicApi.js';
 import { pageSnapshot } from '../../server/contentSnapshot.js';
@@ -11,6 +11,7 @@ export function createHandler({snapshot=publishedSnapshot,list=listPublished}={}
   // Consolidated into this dynamic route to stay within Vercel Hobby's 12-function quota.
   if(resource==='mobile-admin') return mobileAdminHandler(req,res);
   if(resource==='media') return mediaHandler(req,res);
+  if(resource==='image') return imageHandler(req,res);
   if (!publicGet(req,res)) return;
   if(resource==='search'&&!param(req,'q',120))return res.status(400).json({apiVersion:1,error:'Invalid query',code:'INVALID_QUERY'});
   try {
