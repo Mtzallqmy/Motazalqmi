@@ -1,4 +1,5 @@
 import mobileAdminHandler from '../../server/mobileAdmin.js';
+import telegramHandler from '../../server/telegramBot.js';
 import {createHandler as createMediaHandler,imageHandler} from '../../server/mediaInventory.js';
 const mediaHandler=createMediaHandler();
 import { publicGet, sendJson, publicError, listPublished, param, boundedInt } from '../../server/publicApi.js';
@@ -10,6 +11,7 @@ export function createHandler({snapshot=publishedSnapshot,list=listPublished}={}
   const resource=param(req,'resource',30);
   // Consolidated into this dynamic route to stay within Vercel Hobby's 12-function quota.
   if(resource==='mobile-admin') return mobileAdminHandler(req,res);
+  if(resource==='telegram') return telegramHandler(req,res);
   if(resource==='media') return mediaHandler(req,res);
   if(resource==='image') return imageHandler(req,res);
   if (!publicGet(req,res)) return;

@@ -1,0 +1,151 @@
+import {randomUUID,timingSafeEqual} from 'node:crypto';
+import {database,normalizeArticle} from './db.js';
+import {noCache} from './auth.js';
+
+const SITE='https://motazalqmi.vercel.app';
+export const articleLink=slug=>SITE+'/articles/'+encodeURIComponent(slug);
+const same=(a,b)=>{
+ if(typeof a!=='string'||typeof b!=='string')return false;
+ const x=Buffer.from(a),y=Buffer.from(b);
+ return x.length===y.length&&timingSafeEqual(x,y);
+};
+export function telegramConfig(env=process.env){
+ const token=env.TELEGRAM_BOT_TOKEN||'',secret=env.TELEGRAM_WEBHOOK_SECRET||'';
+ const admins=new Set((env.TELEGRAM_ADMIN_IDS||'').split(/[,\s]+/).filter(x=>/^\d+$/.test(x)));
+ return {token,secret,admins,ready:token.length>30&&secret.length>=24&&admins.size>0};
+}
+export function telegramCommand(text){
+ if(typeof text!=='string')return null;
+ const m=text.trim().match(/^\/([a-z]+)(?:@[a-z0-9_]+)?(?:\s+([\s\S]*))?$/i);
+ return m?{name:m[1].toLowerCase(),args:(m[2]||'').trim()}:null;
+}
+const slugify=title=>title.normalize('NFKC').toLowerCase().replace(/[\u064b-\u065f]/g,'').replace(/[^\p{L}\p{N}\s-]/gu,'').trim().replace(/\s+/g,'-').replace(/-+/g,'-').slice(0,100)||'post';
+const HELP=[
+ 'لوحة إدارة المدونة من تيليجرام 🔐',
+ '/articles — المقالات المنشورة',
+ '/drafts — المسودات',
+ '/stats — إحصاء المنشورات',
+ '/show slug — تفاصيل المقالة',
+ '/link slug — رابط المقالة',
+ '/new العنوان | المحتوى — إنشاء مسودة',
+ '/title slug | العنوان الجديد',
+ '/text slug | النص الجديد (Markdown)',
+ '/excerpt slug | الملخص',
+ '/cover slug | رابط صورة HTTPS',
+ '/category slug | القسم',
+ '/featured slug — تمييز/إلغاء تمييز',
+ '/publish slug — نشر',
+ '/unpublish slug — تحويل لمسودة',
+ '/delete slug — حذف مع تأكيد',
+ '/site — معلومات المدونة',
+ '/tagline النص — تغيير وصف المدونة',
+ '/help — هذه الأوامر'
+].join('\n');
+const rowArticle=r=>({...r.data,id:r.id,slug:r.slug,status:r.status,publishDate:r.publish_date});
+const errorText=e=>/^(الصيغة|اكتب|القيمة|رابط|معرف|بيانات|لا توجد|هذه المقالة)/.test(e?.message||'')?e.message:'تحقق من محتوى الأمر أو أعد المحاولة.';
+
+export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch,env=process.env}={}){
+ return async (req,res)=>{
+  noCache(res);
+  if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'POST only'});}
+  const cfg=telegramConfig(env);
+  if(!cfg.ready)return res.status(503).json({error:'Telegram integration is not configured'});
+  if(!same(req.headers?.['x-telegram-bot-api-secret-token'],cfg.secret))return res.status(403).json({error:'Forbidden'});
+  if(!req.body||typeof req.body!=='object'||JSON.stringify(req.body).length>28000)return res.status(400).json({error:'Invalid update'});
+  const msg=req.body.message,cb=req.body.callback_query,actor=msg?.from||cb?.from,chat=msg?.chat||cb?.message?.chat;
+  if(!actor||!chat||chat.type!=='private'||String(actor.id)!==String(chat.id)||!cfg.admins.has(String(actor.id)))
+   return res.status(200).json({ok:true});
+  const call=async(method,body)=>{
+   const response=await send('https://api.telegram.org/bot'+cfg.token+'/'+method,{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(10000)});
+   if(!response.ok)throw Error('Telegram unavailable');
+   const data=await response.json();if(!data.ok)throw Error('Telegram error');return data;
+  };
+  const reply=async(text,buttons)=>{
+   const body={chat_id:chat.id,text:String(text||'').slice(0,3800),disable_web_page_preview:true};
+   if(buttons)body.reply_markup={inline_keyboard:buttons};
+   return call('sendMessage',body);
+  };
+  try{
+   const sql=sqlFactory();
+   const lookup=async slug=>{
+    if(!slug||slug.length>150)throw Error('اكتب رابطًا وصفيًا صحيحًا.');
+    const rows=await sql.query('SELECT id,slug,status,publish_date::text,data FROM blog_articles WHERE slug=$1 LIMIT 1',[slug]);
+    if(!rows.length)throw Error('لا توجد مقالة بهذا الرابط الوصفي.');
+    return rowArticle(rows[0]);
+   };
+   const update=async (old,changes)=>{
+    const a=normalizeArticle({...old,...changes});
+    await sql.query('UPDATE blog_articles SET slug=$1,status=$2,publish_date=$3::date,data=$4::jsonb,updated_at=NOW() WHERE id=$5',
+     [a.slug,a.status,a.publishDate,JSON.stringify(a),old.id]);
+    return a;
+   };
+   const done=async a=>reply((a.status==='published'?'✅ منشور: ':'📝 مسودة: ')+a.title+'\n'+articleLink(a.slug));
+   if(cb){
+    await call('answerCallbackQuery',{callback_query_id:cb.id});
+    if(cb.data==='cancel'){await reply('أُلغيت العملية.');return res.status(200).json({ok:true});}
+    const id=typeof cb.data==='string'&&cb.data.startsWith('del:')?cb.data.slice(4):'';
+    if(!id||id.length>100)return res.status(200).json({ok:true});
+    const rows=await sql.query('DELETE FROM blog_articles WHERE id=$1 RETURNING slug',[id]);
+    await reply(rows.length?'حُذفت المقالة: '+rows[0].slug:'المقالة غير موجودة.');
+    return res.status(200).json({ok:true});
+   }
+   const cmd=telegramCommand(msg?.text);
+   if(!cmd)return res.status(200).json({ok:true});
+   if(['help','start'].includes(cmd.name))await reply(HELP);
+   else if(cmd.name==='stats'){
+    const rows=await sql.query('SELECT status,COUNT(*)::int AS amount FROM blog_articles GROUP BY status',[]);
+    await reply('📊 الإحصاءات\nالمنشور: '+(rows.find(x=>x.status==='published')?.amount||0)+'\nالمسودات: '+(rows.find(x=>x.status==='draft')?.amount||0));
+   }else if(['articles','drafts'].includes(cmd.name)){
+    const status=cmd.name==='drafts'?'draft':'published';
+    const rows=await sql.query('SELECT slug,data FROM blog_articles WHERE status=$1 ORDER BY updated_at DESC LIMIT 20',[status]);
+    await reply((status==='draft'?'📝 المسودات':'📰 المقالات')+'\n'+(rows.length?rows.map((r,i)=>(i+1)+'. '+r.data.title+'\n/show '+r.slug).join('\n\n'):'لا توجد مقالات'));
+   }else if(cmd.name==='new'){
+    const pos=cmd.args.indexOf('|');
+    if(pos<1)throw Error('الصيغة: /new العنوان | النص الكامل');
+    const title=cmd.args.slice(0,pos).trim(),content=cmd.args.slice(pos+1).trim();
+    const id='art-'+randomUUID();
+    const date=new Date(Date.now()+3*60*60*1000).toISOString().slice(0,10);
+    const a=normalizeArticle({id,title,content,status:'draft',slug:slugify(title)+'-'+randomUUID().slice(0,6),
+     category:'general',coverImage:'',author:'معتز العلقمي',publishDate:date});
+    await sql.query('INSERT INTO blog_articles(id,slug,status,publish_date,data) VALUES ($1,$2,$3,$4::date,$5::jsonb)',
+     [id,a.slug,a.status,a.publishDate,JSON.stringify(a)]);
+    await done(a);
+   }else if(['show','link'].includes(cmd.name)){
+    const a=await lookup(cmd.args);
+    await reply((cmd.name==='show'?a.title+'\nالحالة: '+a.status+'\nالقسم: '+a.category+'\n':'')+articleLink(a.slug));
+   }else if(['publish','unpublish','featured'].includes(cmd.name)){
+    const a=await lookup(cmd.args);
+    await done(await update(a,cmd.name==='featured'?{featured:!a.featured}:{status:cmd.name==='publish'?'published':'draft'}));
+   }else if(['title','text','excerpt','cover','category'].includes(cmd.name)){
+    const pos=cmd.args.indexOf('|');
+    if(pos<1)throw Error('الصيغة: /'+cmd.name+' slug | القيمة الجديدة');
+    const slug=cmd.args.slice(0,pos).trim(),value=cmd.args.slice(pos+1).trim();
+    if(!value)throw Error('القيمة الجديدة لا يمكن أن تكون فارغة.');
+    if(cmd.name==='cover'&&!/^https:\/\//i.test(value))throw Error('رابط الصورة يجب أن يبدأ بـ HTTPS.');
+    const a=await lookup(slug);
+    const field={title:'title',text:'content',excerpt:'excerpt',cover:'coverImage',category:'category'}[cmd.name];
+    await done(await update(a,{[field]:value}));
+   }else if(cmd.name==='delete'){
+    const a=await lookup(cmd.args);
+    if(a.id.length>55)throw Error('معرف المقالة طويل؛ احذفها من الموقع.');
+    await reply('⚠️ حذف «'+a.title+'» نهائيًا؟',[[{text:'تأكيد الحذف',callback_data:'del:'+a.id},{text:'إلغاء',callback_data:'cancel'}]]);
+   }else if(cmd.name==='site'){
+    const r=await sql.query("SELECT data FROM blog_public_metadata WHERE id='editorial' LIMIT 1",[]);
+    await reply('🏛 '+(r[0]?.data?.site?.name||'مدونة معتز العلقمي')+'\n'+(r[0]?.data?.site?.tagline||'')+'\n'+SITE);
+   }else if(cmd.name==='tagline'){
+    if(!cmd.args||cmd.args.length>240)throw Error('اكتب عبارة لا تزيد على 240 حرفًا.');
+    const r=await sql.query("SELECT data FROM blog_public_metadata WHERE id='editorial' LIMIT 1",[]);
+    if(!r.length)throw Error('بيانات المدونة غير موجودة.');
+    const content=JSON.stringify({...r[0].data,site:{...r[0].data.site,tagline:cmd.args}});
+    await sql.query("UPDATE blog_public_metadata SET data=$1::jsonb,updated_at=NOW() WHERE id='editorial'",[content]);
+    await reply('✅ تم تحديث شعار المدونة.');
+   }else await reply('أمر غير معروف. أرسل /help.');
+   return res.status(200).json({ok:true});
+  }catch(e){
+   try{await reply('تعذّر تنفيذ الأمر: '+errorText(e));}catch{}
+   return res.status(200).json({ok:true});
+  }
+ };
+}
+export default createTelegramHandler();
