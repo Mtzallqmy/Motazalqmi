@@ -1,7 +1,8 @@
 package com.moataz.motazalqmi;
 
 import android.content.Context;
-import android.app.Activity;
+import android.os.Handler;
+import android.os.Looper;
 import android.content.SharedPreferences;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -32,7 +33,14 @@ public final class BlogStore {
     private BlogStore(Context c){context=c.getApplicationContext();preferences=context.getSharedPreferences("motazalqmi-reader-v1",Context.MODE_PRIVATE);load();}
     public static synchronized BlogStore get(Context c){if(instance==null)instance=new BlogStore(c);return instance;}
     private File cachedFile(){return new File(context.getFilesDir(),"published-content-v1.json");}
-    private void load(){try(FileInputStream in=new FileInputStream(cachedFile())){cache=new JSONObject(read(in,8*1024*1024));}catch(Exception ignored){cache=new JSONObject();}}
+    private void load(){
+        try(FileInputStream in=new FileInputStream(cachedFile())){cache=new JSONObject(read(in,24*1024*1024));}
+        catch(Exception ignored){
+            try(InputStream in=context.getAssets().open("bootstrap-seed.json")){
+                cache=new JSONObject(read(in,4*1024*1024));
+            }catch(Exception fallback){cache=new JSONObject();}
+        }
+    }
     private static String read(InputStream input,int max) throws Exception{ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[8192];int n;while((n=input.read(buf))!=-1){if(out.size()+n>max)throw new IllegalArgumentException("Response too large");out.write(buf,0,n);}return out.toString("UTF-8");}
     private static JSONObject fetch(String path) throws Exception {
         URL url=new URL(BASE+path);
@@ -55,7 +63,7 @@ public final class BlogStore {
     public boolean toggleFavorite(String id){Set<String> ids=favorites();boolean added;if(ids.contains(id)){ids.remove(id);added=false;}else{ids.add(id);added=true;}preferences.edit().putStringSet("saved",ids).apply();return added;}
     public long syncedAt(){return preferences.getLong("synced_at",0);}
     public interface OnSync {void completed(boolean success,String error);}
-    public void sync(Activity activity,OnSync callback){synchronized(this){if(syncing)return;syncing=true;}
+    public void sync(OnSync callback){synchronized(this){if(syncing){new Handler(Looper.getMainLooper()).post(()->callback.completed(false,"المزامنة جارية بالفعل"));return;}syncing=true;}
       new Thread(()->{boolean ok=false;String error="";
         try {
             JSONObject result=fetch("/api/v1/bootstrap");
@@ -76,19 +84,25 @@ public final class BlogStore {
             if(bytes.length>24*1024*1024)throw new IllegalStateException("Library is too large to cache");
             File tmp=new File(context.getFilesDir(),"published-content-v1.tmp");
             try(FileOutputStream out=new FileOutputStream(tmp)){out.write(bytes);out.getFD().sync();}
-            if(!tmp.renameTo(cachedFile()))throw new IllegalStateException("Unable to save offline library");
+            try { java.nio.file.Files.move(tmp.toPath(),cachedFile().toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch(java.nio.file.AtomicMoveNotSupportedException ignored) {
+                java.nio.file.Files.move(tmp.toPath(),cachedFile().toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
             synchronized(this){cache=result;}
             preferences.edit().putLong("synced_at",System.currentTimeMillis()).apply();
             ok=true;
         }catch(Exception ex){error="تعذر تحديث المحتوى، ويمكنك قراءة المحفوظ محليًا.";}
         synchronized(this){syncing=false;}
         final boolean success=ok; final String message=error;
-        activity.runOnUiThread(()->callback.completed(success,message));
+        new Handler(Looper.getMainLooper()).post(()->callback.completed(success,message));
       },"blog-content-sync").start();
     }
-    public void retrieveArticle(Activity activity,String slug,java.util.function.Consumer<JSONObject> callback){
+    public void retrieveArticle(String slug,java.util.function.Consumer<JSONObject> callback){
       new Thread(()->{JSONObject a=null;try{a=fetch("/api/v1/article?slug="+java.net.URLEncoder.encode(slug,"UTF-8")).optJSONObject("article");}catch(Exception ignored){}
-        final JSONObject item=a;activity.runOnUiThread(()->callback.accept(item));
+        final JSONObject item=a;new Handler(Looper.getMainLooper()).post(()->callback.accept(item));
       },"blog-single-article").start();
     }
 }

@@ -1,4 +1,8 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
 
 android {
     namespace 'com.moataz.motazalqmi'
@@ -9,19 +13,18 @@ android {
         applicationId 'com.moataz.motazalqmi'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '1.0.0'
+        versionCode 2
+        versionName '2.0.0'
         ndk { abiFilters 'arm64-v8a' }
         externalNativeBuild { cmake { cppFlags '' } }
     }
     externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    kotlinOptions { jvmTarget = '17' }
+    buildFeatures { compose true; buildConfig true }
     buildTypes {
         debug { minifyEnabled false }
-        release {
-            minifyEnabled false
-            // Real release signing is configured via protected environment variables.
-        }
+        release { minifyEnabled false }
     }
     signingConfigs {
         if (System.getenv('ANDROID_KEYSTORE_PATH') && System.getenv('ANDROID_KEYSTORE_PASSWORD')
@@ -40,4 +43,19 @@ android {
     buildTypes.release.signingConfig = signingConfigs.findByName('production')
     packaging { jniLibs { useLegacyPackaging = false } }
     lint { abortOnError true }
+}
+
+dependencies {
+    implementation platform('androidx.compose:compose-bom:2025.01.01')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.foundation:foundation'
+    implementation 'androidx.compose.foundation:foundation-layout'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+    implementation 'io.coil-kt:coil-compose:2.7.0'
 }

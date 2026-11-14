@@ -1,7 +1,7 @@
-name: Android Native ARM64 APK
+name: Android Native Compose ARM64 APK
 on:
   push:
-    branches: [main]
+    branches: [main, feat/motazalqmi-compose-v2]
     paths:
       - 'android/**'
       - '.github/workflows/android.yml'
@@ -32,8 +32,8 @@ jobs:
           yes | "$SDK_MANAGER" --licenses >/dev/null || true
           "$SDK_MANAGER" 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
 
-      - name: Build installable 64-bit debug APK
-        run: gradle -p android :app:assembleDebug --no-daemon --stacktrace
+      - name: Build Android 8+ ARM64 Compose APK
+        run: gradle -p android :app:assembleDebug :app:lintDebug --no-daemon --stacktrace
       - name: Verify built APK has ARM64 native library
         shell: bash
         run: |
@@ -46,7 +46,7 @@ jobs:
       - name: Upload installable ARM64 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Motazalqmi-Android8Plus-ARM64-Debug-APK
+          name: Motazalqmi-v2.0.0-Android8Plus-ARM64-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -70,7 +70,7 @@ jobs:
         if: ${{ env.SIGNING_READY == 'yes' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Motazalqmi-ARM64-Production-Signed-APK
+          name: Motazalqmi-v2.0.0-ARM64-Production-Signed-APK
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
