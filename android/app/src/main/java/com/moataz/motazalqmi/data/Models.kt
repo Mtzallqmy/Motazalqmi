@@ -10,7 +10,7 @@ data class ArticleDto(
  val publishDate: String = "", val coverImage: String = "", val featured: Boolean = false,
  val tags: List<String> = emptyList(), val status: String = "published",
  val readTime: String = "5 دقائق", val views: Int = 0, val likes: Int = 0,
- val updatedAt: String = ""
+ val updatedAt: String = "",val fontFamily: String = "amiri",val fontSize: Int = 22
 )
 data class SectionDto(val id: String = "", val title: String = "", val subtitle: String = "")
 data class QuoteDto(val id: String = "", val text: String = "", val author: String = "", val source: String = "")

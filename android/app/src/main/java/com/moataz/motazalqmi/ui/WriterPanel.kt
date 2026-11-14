@@ -13,6 +13,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.TextView
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moataz.motazalqmi.data.ArticleDto
@@ -180,6 +184,12 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  var cover by rememberSaveable(original?.id){mutableStateOf(original?.coverImage.orEmpty())}
  var tags by rememberSaveable(original?.id){mutableStateOf(original?.tags?.joinToString("،").orEmpty())}
  var featured by rememberSaveable(original?.id){mutableStateOf(original?.featured?:false)}
+ var fontFamily by rememberSaveable(original?.id){mutableStateOf(original?.fontFamily?:"amiri")}
+ var fontSize by rememberSaveable(original?.id){mutableIntStateOf(original?.fontSize?:22)}
+ var preview by rememberSaveable(original?.id){mutableStateOf(false)}
+ val context=LocalContext.current
+ val markdown=remember(context){MarkdownEngine(context)}
+
  var confirm by remember{mutableStateOf(false)}
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)){
   Text(if(original==null)"مقال جديد" else "تعديل المقال",style=MaterialTheme.typography.titleLarge)
@@ -191,7 +201,45 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   OutlinedTextField(excerpt,{excerpt=it.take(1000)},label={Text("ملخص المقال")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(readTime,{readTime=it.take(100)},label={Text("مدة القراءة التقديرية")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(tags,{tags=it.take(500)},label={Text("وسوم مفصولة بفواصل")},modifier=Modifier.fillMaxWidth())
-  OutlinedTextField(content,{content=it.take(180000)},label={Text("النص الكامل (Markdown)")},minLines=10,modifier=Modifier.fillMaxWidth())
+  Text("أدوات تنسيق المقال",style=MaterialTheme.typography.titleMedium)
+  Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)){
+   AssistChip(onClick={content+="\n## عنوان فرعي\n"},label={Text("عنوان")})
+   AssistChip(onClick={content+="**نص عريض**"},label={Text("عريض")})
+   AssistChip(onClick={content+="*نص مائل*"},label={Text("مائل")})
+   AssistChip(onClick={content+="\n> اقتباس أو بيت شعر\n"},label={Text("اقتباس")})
+   AssistChip(onClick={content+="\n- عنصر من القائمة\n"},label={Text("قائمة")})
+   AssistChip(onClick={content+="[عنوان الرابط](https://example.com)"},label={Text("رابط")})
+   AssistChip(onClick={content+="![وصف الصورة](https://example.com/photo.jpg)"},label={Text("صورة")})
+  }
+  Text("خط المقالة",style=MaterialTheme.typography.titleSmall)
+  Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(5.dp)){
+   listOf("amiri" to "أميري","naskh" to "نسخ","tajawal" to "تجوال").forEach{(id,label)->
+    FilterChip(selected=fontFamily==id,onClick={fontFamily=id},label={Text(label)})
+   }
+  }
+  Text("حجم الخط: $fontSize")
+  Slider(value=fontSize.toFloat(),onValueChange={fontSize=it.toInt()},valueRange=16f..32f,steps=15)
+  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+   Text("الكلمات: "+content.trim().split(Regex("\\s+")).count{it.isNotBlank()})
+   TextButton(onClick={preview=!preview}){Text(if(preview)"متابعة التحرير" else "معاينة حيّة")}
+  }
+  if(preview){
+   AndroidView(factory={TextView(it).apply{
+    textDirection=android.view.View.TEXT_DIRECTION_FIRST_STRONG_RTL
+    layoutDirection=android.view.View.LAYOUT_DIRECTION_RTL
+    setPadding(24,24,24,24)
+   }},modifier=Modifier.fillMaxWidth().heightIn(min=240.dp),update={view->
+    markdown.render(view,content)
+    view.textSize=fontSize.toFloat()
+    view.typeface=when(fontFamily){
+     "tajawal"->android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.NORMAL)
+     "naskh"->android.graphics.Typeface.create("serif",android.graphics.Typeface.NORMAL)
+     else->android.graphics.Typeface.create("serif",android.graphics.Typeface.NORMAL)
+    }
+   })
+  }else {
+   OutlinedTextField(content,{content=it.take(180000)},label={Text("النص الكامل (Markdown)")},minLines=12,modifier=Modifier.fillMaxWidth())
+  }
   Row(verticalAlignment=Alignment.CenterVertically){
    Text("مقال مميّز",Modifier.weight(1f));Switch(featured,onCheckedChange={featured=it})
   }
@@ -202,7 +250,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
     content=content,excerpt=excerpt,coverImage=cover,readTime=readTime,featured=featured,status=status,
     author=original?.author?.takeIf{it.isNotBlank()} ?: "معتز العلقمي",
     publishDate=original?.publishDate?.takeIf{it.isNotBlank()} ?: java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US).format(java.util.Date()),
-    tags=tags.split('،',',').map{it.trim()}.filter{it.isNotBlank()})
+    tags=tags.split('،',',').map{it.trim()}.filter{it.isNotBlank()},fontFamily=fontFamily,fontSize=fontSize)
   }
   Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
    Button(onClick={save(prepared("published"))},enabled=valid&&!busy){Text("نشر")}
