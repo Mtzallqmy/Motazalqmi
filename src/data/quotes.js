@@ -1,6 +1,3 @@
-export const DAILY_QUOTES = [
-  { text: 'إنَّ الكلامَ لفي الفؤادِ وإنَّما ... جُعِلَ اللسانُ على الفؤادِ دليلا', author: 'يُنسب إلى الأخطل التغلبي', source: 'من الشعر العربي' },
-  { text: 'خيرُ جليسٍ في الزمانِ كتابُ ... تَلهو بهِ إنْ خانَكَ الأصحابُ', author: 'أبو الطيب المتنبي', source: 'الديوان' },
-  { text: 'البيانُ بصرٌ، والعيُّ عمى، كما أنَّ العلمَ بصرٌ والجهلَ عمى.', author: 'أبو عثمان الجاحظ', source: 'البيان والتبيين' },
-  { text: 'وما الفضلُ إلا لأهلِ العلمِ إنَّهمُ ... على الهُدى لِمَنِ استهدى أدلّاءُ', author: 'يُنسب إلى الإمام الشافعي', source: 'منسوب إلى ديوانه' }
-];
+import { QUOTES } from '../../shared/publicContent.js';
+// One list is now used by both the published blog and the native reader API.
+export const DAILY_QUOTES = QUOTES;
