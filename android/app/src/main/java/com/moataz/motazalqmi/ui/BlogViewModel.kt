@@ -15,6 +15,9 @@ import javax.inject.Inject
  val busy = MutableStateFlow(false)
  val notice = MutableStateFlow("")
  init { viewModelScope.launch { try { repository.initialize(); sync() } catch (_: Exception) { notice.value = "تعذر تجهيز المكتبة المحلية" } } }
+ fun syncIfStale() {
+  if(System.currentTimeMillis()-library.value.syncedAt>60_000L)sync()
+ }
  fun sync() { if (busy.value) return; viewModelScope.launch {
   busy.value = true
   try { repository.sync(); notice.value = "تم تحديث المكتبة" }

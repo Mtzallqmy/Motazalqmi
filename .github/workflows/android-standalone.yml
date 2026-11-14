@@ -40,7 +40,7 @@ jobs:
           APK=android/app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > /tmp/app-badging.txt
-          grep -F "package: name='com.moataz.motazalqmi.preview'" /tmp/app-badging.txt
+          grep -F "package: name='com.moataz.motazalqmi.preview2'" /tmp/app-badging.txt
           grep -F "sdkVersion:'26'" /tmp/app-badging.txt
           grep -F "native-code: 'arm64-v8a'" /tmp/app-badging.txt
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$APK"
@@ -53,8 +53,8 @@ jobs:
             exit 1
           fi
           mkdir -p dist
-          cp "$APK" dist/Motazalqmi-v2.1.0-Android8Plus-ARM64-Standalone.apk
-          (cd dist && sha256sum Motazalqmi-v2.1.0-Android8Plus-ARM64-Standalone.apk > SHA256SUMS)
+          cp "$APK" dist/Motazalqmi-v2.2.0-Android8Plus-ARM64-Standalone.apk
+          (cd dist && sha256sum Motazalqmi-v2.2.0-Android8Plus-ARM64-Standalone.apk > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
           name: Motazalqmi-Android8Plus-ARM64-Installable
@@ -93,11 +93,11 @@ jobs:
             set -euo pipefail
             gradle -p android :app:assembleDebug --no-daemon -PmotazSeparatePreview=true
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            adb shell pm path com.moataz.motazalqmi.preview
-            adb shell am start -W -n com.moataz.motazalqmi.preview/com.moataz.motazalqmi.MainActivity
+            adb shell pm path com.moataz.motazalqmi.preview2
+            adb shell am start -W -n com.moataz.motazalqmi.preview2/com.moataz.motazalqmi.MainActivity
             sleep 6
-            adb shell pidof com.moataz.motazalqmi.preview
-            adb shell dumpsys activity activities | grep com.moataz.motazalqmi.preview
+            adb shell pidof com.moataz.motazalqmi.preview2
+            adb shell dumpsys activity activities | grep com.moataz.motazalqmi.preview2
   publish-test-release:
     needs: [arm64-apk, emulator-install]
     if: github.ref == 'refs/heads/main'
@@ -117,12 +117,12 @@ jobs:
         run: |
           set -euo pipefail
           (cd dist && sha256sum --check SHA256SUMS)
-          tag=v2.1.0-standalone.1
+          tag=v2.2.0-standalone.1
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo 'Preview release already exists: no silent replacement.'
             exit 0
           fi
-          gh release create "$tag" dist/Motazalqmi-v2.1.0-Android8Plus-ARM64-Standalone.apk dist/SHA256SUMS \
+          gh release create "$tag" dist/Motazalqmi-v2.2.0-Android8Plus-ARM64-Standalone.apk dist/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title 'مدونة معتز العلقمي — ARM64 Android 8+ (Standalone)' \
-            --notes 'Standalone test release for 64-bit Android 8.0+. Package com.moataz.motazalqmi.preview is intentionally different from the production package so a previous production signing certificate cannot cause INSTALL_FAILED_UPDATE_INCOMPATIBLE. Debug signed; installs alongside the official application and does not overwrite its data. The APK uses ARM64 JNI libraries only. Verified via apksigner for API 26+, zipalign, Android 8 and Android 9 emulator installation and launch checks. An official in-place update requires the original production signing key; do not uninstall your official app to install this preview.'
+            --notes 'Standalone 64-bit Android 8.0+ testing build with a distinct package com.moataz.motazalqmi.preview2 for avoiding any signing conflict with previously installed preview APKs. Production update still requires original signing key. Package com.moataz.motazalqmi.preview2 is intentionally different from the production package so a previous production signing certificate cannot cause INSTALL_FAILED_UPDATE_INCOMPATIBLE. Debug signed; installs alongside the official application and does not overwrite its data. The APK uses ARM64 JNI libraries only. Verified via apksigner for API 26+, zipalign, Android 8 and Android 9 emulator installation and launch checks. An official in-place update requires the original production signing key; do not uninstall your official app to install this preview.'

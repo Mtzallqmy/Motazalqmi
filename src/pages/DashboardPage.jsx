@@ -126,7 +126,7 @@ export function DashboardPage() {
                 <input type="range" min="16" max="32" step="1" value={form.fontSize} onChange={e=>change('fontSize',Number(e.target.value))} className="block w-full mt-3 accent-[#0D5C63]" />
               </label>
             </div>
-            <p className="text-xs text-ink/60">الكلمات: {form.content.trim()?form.content.trim().split(/\\s+/).length:0} · الحروف: {form.content.length}</p>
+            <p className="text-xs text-ink/60">الكلمات: {form.content.trim()?form.content.trim().split(/\s+/).length:0} · الحروف: {form.content.length}</p>
           </div>
           <div><div className="flex flex-wrap items-center justify-between gap-2 mb-2"><label htmlFor="article-content" className="text-sm font-bold">متن المقالة الكامل *</label><div className="flex gap-1 flex-wrap"><button onClick={()=>format('\n\n### ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-teal">عنوان فرعي</button><button onClick={()=>format('\n\n> ','\n\n')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold text-rust flex items-center gap-1"><Quote size={13}/> اقتباس / شعر</button><button onClick={()=>format('**','**')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">عريض</button><button onClick={()=>format('«','»')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold">« »</button>
             <button onClick={()=>format('## ')} type="button" className="bg-cream border border-gold/30 rounded-lg px-2 py-1 text-xs font-bold flex gap-1 items-center"><Heading2 size={13}/> عنوان كبير</button>

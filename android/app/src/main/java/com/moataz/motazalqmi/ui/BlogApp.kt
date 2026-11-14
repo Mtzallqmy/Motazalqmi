@@ -28,6 +28,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.res.ResourcesCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
@@ -48,6 +51,14 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
  val settings by vm.settings.collectAsStateWithLifecycle()
  val busy by vm.busy.collectAsStateWithLifecycle()
  val notice by vm.notice.collectAsStateWithLifecycle()
+ val owner=LocalLifecycleOwner.current
+ DisposableEffect(owner) {
+  val observer=LifecycleEventObserver { _,event ->
+   if(event==Lifecycle.Event.ON_RESUME)vm.syncIfStale()
+  }
+  owner.lifecycle.addObserver(observer)
+  onDispose { owner.lifecycle.removeObserver(observer) }
+ }
  val nav = rememberNavController()
  val back by nav.currentBackStackEntryAsState()
  val route = back?.destination?.route ?: "home"
