@@ -5,13 +5,14 @@ import {api} from '../lib/api';
 const Context=createContext(null);
 export function ArticlesProvider({children}){
  const {isAdmin,loading:authLoading}=useAuth();
+ const [quotes,setQuotes]=useState([]);
  const [articles,setArticles]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[isDemo,setIsDemo]=useState(false);
  const load=async admin=>{
   setLoading(true);
   try{
    const r=await api(admin?'/api/articles?scope=admin':'/api/articles');
-   setArticles(r.articles.length?r.articles:INITIAL_ARTICLES);setIsDemo(!r.articles.length);setError('');
-  }catch(e){setArticles(INITIAL_ARTICLES);setIsDemo(true);setError('تعذّر تحميل المقالات من Neon: '+e.message);}
+   setArticles(r.articles);setQuotes(r.editorial?.quotes || []);setIsDemo(!r.articles.length);setError('');
+  }catch(e){setArticles([]);setQuotes([]);setIsDemo(true);setError('تعذّر تحميل المقالات من Neon: '+e.message);}
   finally{setLoading(false);}
  };
  useEffect(()=>{if(!authLoading)load(isAdmin);},[isAdmin,authLoading]);
@@ -19,6 +20,6 @@ export function ArticlesProvider({children}){
  const remove=async id=>{if(!isAdmin)throw new Error('صلاحية المدير مطلوبة.');await api('/api/articles',{method:'POST',body:JSON.stringify({action:'delete',id})});await load(true);};
  const importExamples=async()=>{if(!isAdmin||!isDemo)throw new Error('الاستيراد غير متاح.');await api('/api/articles',{method:'POST',body:JSON.stringify({action:'import',articles:INITIAL_ARTICLES})});await load(true);};
  const published=useMemo(()=>articles.filter(a=>a.status==='published'),[articles]);
- return <Context.Provider value={{articles,published,loading,error,isDemo,save,remove,importExamples}}>{children}</Context.Provider>;
+ return <Context.Provider value={{articles,published,quotes,loading,error,isDemo,save,remove,importExamples}}>{children}</Context.Provider>;
 }
 export const useArticles=()=>useContext(Context);

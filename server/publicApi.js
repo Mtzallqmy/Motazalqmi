@@ -25,7 +25,7 @@ export function sendJson(req,res,payload,{seconds=60}={}) {
 export function publicError(res,err) {
   console.error('Public blog API failed',err?.code || err?.name || 'unexpected');
   res.setHeader('Cache-Control','no-store');
-  return res.status(503).json({apiVersion:1,error:'تعذر تحميل المحتوى حاليًا.',code:'CONTENT_UNAVAILABLE'});
+  return res.status(503).json({apiVersion:1,code:'CONTENT_UNAVAILABLE',error:'تعذر تحميل المحتوى حاليًا.'});
 }
 export function param(req,key,max=120){
   const x=req.query?.[key];
@@ -37,6 +37,6 @@ export function boundedInt(value,fallback,min,max){
   const n=Number(value);return Math.min(Math.max(n,min),max);
 }
 export async function listPublished(options={}) {
-  const { publishedSnapshot, pageSnapshot } = await import('./contentSnapshot.js');
-  return pageSnapshot(await publishedSnapshot(),options);
+ const {publishedSnapshot,pageSnapshot}=await import('./contentSnapshot.js');
+ return pageSnapshot(await publishedSnapshot(),options);
 }

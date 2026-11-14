@@ -1,3 +1,4 @@
+import { editorial } from '../server/editorial.js';
 import { randomUUID } from 'node:crypto';
 import { checkOrigin,getAdmin,noCache } from '../server/auth.js';
 import { database,articleRow,normalizeArticle } from '../server/db.js';
@@ -13,7 +14,7 @@ export default async function handler(req,res){
    const list=req.query.scope==='admin'
       ?await sql`SELECT id,slug,status,publish_date::text,data FROM blog_articles ORDER BY publish_date DESC,updated_at DESC LIMIT 500`
       :await sql`SELECT id,slug,status,publish_date::text,data FROM blog_articles WHERE status='published' ORDER BY publish_date DESC,updated_at DESC LIMIT 500`;
-   return res.status(200).json({articles:list.map(articleRow)});
+   return res.status(200).json({articles:list.map(articleRow),editorial:await editorial()});
   }
   if(JSON.stringify(req.body||'').length>240000)return res.status(413).json({error:'المقالة تتجاوز الحد المسموح.'});
   if(req.body.action==='save'){

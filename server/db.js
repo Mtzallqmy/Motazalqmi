@@ -4,7 +4,7 @@ export function database(){
  if(!url||!/^postgres(ql)?:\/\//.test(url))throw new Error('DATABASE_URL is not configured');
  return neon(url);
 }
-export const articleRow=row=>({...row.data,id:row.id,slug:row.slug,status:row.status,publishDate:row.publish_date});
+export const articleRow=row=>({...row.data,id:row.id,slug:row.slug,status:row.status,publishDate:row.publish_date,updatedAt:row.updated_at});
 export function normalizeArticle(a){
  if(!a||typeof a!=='object'||Array.isArray(a))throw new Error('بيانات المقالة غير صالحة.');
  const str=(key,max,def='')=>{const value=a[key]??def;if(typeof value!=='string'||value.length>max)throw new Error('حقل غير صالح: '+key);return value.trim();};
