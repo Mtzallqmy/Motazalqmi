@@ -1,4 +1,4 @@
-import {randomUUID,timingSafeEqual,createHash} from 'node:crypto';
+import {randomUUID,timingSafeEqual,createHash,createHmac} from 'node:crypto';
 import {database,normalizeArticle} from './db.js';
 import {noCache} from './auth.js';
 
@@ -10,9 +10,9 @@ const same=(a,b)=>{
  return x.length===y.length&&timingSafeEqual(x,y);
 };
 export function telegramConfig(env=process.env){
- const token=env.TELEGRAM_BOT_TOKEN||'',secret=env.TELEGRAM_WEBHOOK_SECRET||'';
+ const token=env.TELEGRAM_BOT_TOKEN||'',secret=env.TELEGRAM_WEBHOOK_SECRET||(env.SESSION_SECRET?.length>=32?createHmac('sha256',env.SESSION_SECRET).update('telegram-webhook-motazalqmi').digest('hex'):'');
  const admins=new Set((env.TELEGRAM_ADMIN_IDS||'').split(/[,\s]+/).filter(x=>/^\d+$/.test(x)));
- return {token,secret,admins,ready:token.length>30&&secret.length>=24&&admins.size>0};
+ return {token,secret,admins,ready:token.length>30&&secret.length>=24};
 }
 export function telegramCommand(text){
  if(typeof text!=='string')return null;
@@ -57,7 +57,7 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
   if(!same(req.headers?.['x-telegram-bot-api-secret-token'],cfg.secret))return res.status(403).json({error:'Forbidden'});
   if(!req.body||typeof req.body!=='object'||JSON.stringify(req.body).length>28000)return res.status(400).json({error:'Invalid update'});
   const msg=req.body.message,cb=req.body.callback_query,actor=msg?.from||cb?.from,chat=msg?.chat||cb?.message?.chat;
-  if(!actor||!chat||chat.type!=='private'||String(actor.id)!==String(chat.id)||!cfg.admins.has(String(actor.id)))
+  if(!actor||!chat||chat.type!=='private'||String(actor.id)!==String(chat.id))
    return res.status(200).json({ok:true});
   const call=async(method,body)=>{
    const response=await send('https://api.telegram.org/bot'+cfg.token+'/'+method,{
@@ -72,6 +72,22 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
   };
   try{
    const sql=sqlFactory();
+   const actorId=String(actor.id);
+   const adminRows=await sql.query("SELECT data FROM blog_public_metadata WHERE id='telegram_admin' LIMIT 1",[]);
+   const isAdmin=cfg.admins.has(actorId)||Boolean(adminRows[0]?.data?.ids?.includes(actorId));
+   if(!isAdmin){
+    const pair=telegramCommand(msg?.text);
+    if(pair?.name==='link'&&/^[a-f0-9]{40}$/.test(pair.args)){
+     const hash=createHash('sha256').update(pair.args).digest('hex');
+     const matches=await sql.query("DELETE FROM blog_public_metadata WHERE id='telegram_pair' AND data->>'hash'=$1 AND (data->>'expiresAt')::bigint>$2::bigint RETURNING id",[hash,String(Date.now())]);
+     if(matches.length){
+      const list=new Set([...(adminRows[0]?.data?.ids||[]),actorId]);
+      await sql.query("INSERT INTO blog_public_metadata(id,data) VALUES ('telegram_admin',$1::jsonb) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",[JSON.stringify({ids:[...list]})]);
+      await reply('✅ تم ربط حسابك بلوحة إدارة مدونة معتز العلقمي. أرسل /help.');
+     }else await reply('رمز الربط منتهي أو غير صحيح. أنشئ رمزًا جديدًا من لوحة الكاتب.');
+    }
+    return res.status(200).json({ok:true});
+   }
    const lookup=async slug=>{
     if(!slug||slug.length>150)throw Error('اكتب رابطًا وصفيًا صحيحًا.');
     const rows=await sql.query('SELECT id,slug,status,publish_date::text,data FROM blog_articles WHERE slug=$1 LIMIT 1',[slug]);
