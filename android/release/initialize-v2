@@ -1,0 +1,4 @@
+Owner-authorized initial production signing for version 2.0.0.
+Publish only after all quality and Android API 26/29 checks succeed.
+Reuse existing signing secrets if present. Never regenerate if the tag already exists.
+Recovery private key was saved privately before this trigger was enabled.
