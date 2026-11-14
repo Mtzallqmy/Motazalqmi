@@ -145,9 +145,10 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
 }
 @Composable private fun Search(library: Library, settings: ReadingSettings, open: (String) -> Unit) {
  var query by rememberSaveable { mutableStateOf("") }
- val results by produceState(library.articles, query, library) {
+ var results by remember { mutableStateOf(emptyList<ArticleDto>()) }
+ LaunchedEffect(query, library) {
   kotlinx.coroutines.delay(200)
-  value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+  results = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
    library.articles.filter { a -> a.id in library.available && ArabicSearch.matches(query, a.title, a.content, a.author, a.tags.joinToString(" "), library.sections.find { it.id == a.category }?.title ?: "") }
   }
  }
