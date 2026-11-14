@@ -26,3 +26,31 @@ test('read-only API refuses mutations and bounds parameters',()=>{
  assert.equal(boundedInt('999',30,1,100),100);
  assert.equal(param({query:{q:' x '}},'q'),'x');
 });
+
+import {normalizeArabic,pageSnapshot,publishedSnapshot,syncManifest} from '../server/contentSnapshot.js';
+import {createResourceHandler} from '../api/v1/[resource].js';
+const snapshot={revision:'a'.repeat(64),articles:[{id:'a',slug:'alif',title:'إِبْدَاع',content:'نص عربي',author:'معتز',category:'books',tags:['بلاغة'],featured:true},{id:'b',title:'آخر',content:'نص',author:'كاتب',tags:[]}]};
+test('Arabic search includes author, tags, content and category',()=>{
+ assert.equal(normalizeArabic('إِبْدَاع'),'ابداع');
+ for(const q of ['ابداع','معتز','بلاغة','عربي','بطون'])assert.equal(pageSnapshot(snapshot,{q}).articles[0].id,'a');
+ assert.equal(pageSnapshot(snapshot,{featured:true}).total,1);
+ assert.equal(pageSnapshot(snapshot,{limit:1}).hasMore,true);
+ assert.equal(pageSnapshot(snapshot).articles[0].content,undefined);
+});
+test('snapshot is published only, atomic and changes revision on deletion',async()=>{
+ let statement='';const sql=async (parts)=>{statement=parts.join('?');return [{id:'a',slug:'s',status:'published',publish_date:'2026-11-14',updated_at:'today',data:{title:'t',content:'c'}}]};
+ const a=await publishedSnapshot(sql),b=await publishedSnapshot(async()=>[]);
+ assert.match(statement,/WHERE status='published'/);assert.notEqual(a.revision,b.revision);
+ assert.deepEqual(syncManifest(b).ids,[]);assert.equal(syncManifest(a).authoritative,true);
+});
+test('new API resources report snapshots, validation, ETags and failures',async()=>{
+ const handler=createResourceHandler(async()=>snapshot);
+ for(const resource of ['sync','search','featured','config','versions']) {
+  const x=fake({query:{resource,q:'ابداع',since:snapshot.revision}});await handler(x.req,x.res);
+  assert.equal(x.res.statusCode,200,resource);assert.equal(JSON.parse(x.res.body).apiVersion,1);
+  const y=fake({query:{resource,q:'ابداع',since:snapshot.revision},headers:{'if-none-match':x.headers.etag}});await handler(y.req,y.res);assert.equal(y.res.statusCode,304);
+ }
+ const a=fake({query:{resource:'search',q:'x'.repeat(121)}});await handler(a.req,a.res);assert.equal(a.res.statusCode,400);
+ const b=fake({query:{resource:'sync'}});await createResourceHandler(async()=>{throw Error('db secret')})(b.req,b.res);assert.equal(b.res.statusCode,503);assert.ok(!b.res.body.includes('secret'));
+ const c=fake({method:'POST',query:{resource:'sync'}});await handler(c.req,c.res);assert.equal(c.res.statusCode,405);
+});
