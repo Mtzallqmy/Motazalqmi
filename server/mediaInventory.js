@@ -44,7 +44,11 @@ export async function imageHandler(req,res){
    return res.status(400).json({apiVersion:1,error:'Invalid media host'});
   const images=imageInventory(await publishedSnapshot());
   if(!images.some(x=>x.url===url))return res.status(404).json({apiVersion:1,error:'Image not published'});
-  const upstream=await fetch(url,{method:'GET',redirect:'error',signal:AbortSignal.timeout(9000),headers:{Accept:'image/avif,image/webp,image/jpeg,image/png'}});
+  // Android 9 cannot decode AVIF natively. Request JPEG explicitly from Unsplash.
+  const sourceUrl=new URL(url);
+  sourceUrl.searchParams.delete('auto');
+  sourceUrl.searchParams.set('fm','jpg');
+  const upstream=await fetch(sourceUrl.toString(),{method:'GET',redirect:'error',signal:AbortSignal.timeout(9000),headers:{Accept:'image/jpeg'}});
   if(!upstream.ok)return res.status(502).json({apiVersion:1,error:'Image origin unavailable'});
   const kind=(upstream.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
   if(!['image/jpeg','image/webp','image/png','image/avif'].includes(kind))
