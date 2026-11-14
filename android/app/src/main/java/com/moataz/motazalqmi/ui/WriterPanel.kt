@@ -26,39 +26,69 @@ import retrofit2.http.POST
 import retrofit2.http.Query
 import javax.inject.Inject
 
-data class WriterLogin(val email:String,val password:String)
-data class WriterAccess(val accessToken:String="",val expiresAt:Long=0L)
+data class WriterLogin(val email:String,val password:String,val remember:Boolean=true)
+data class WriterRefresh(val grantType:String="refresh",val refreshToken:String)
+data class WriterAccess(val accessToken:String="",val expiresAt:Long=0L,val refreshToken:String?=null,val refreshExpiresAt:Long=0L)
 data class WriterList(val articles:List<ArticleDto> = emptyList())
 data class WriterAction(val action:String,val article:ArticleDto?=null,val id:String?=null)
 interface WriterApi {
  @POST("api/v1/mobile-admin") suspend fun login(@Body value:WriterLogin):WriterAccess
+ @POST("api/v1/mobile-admin") suspend fun refresh(@Body value:WriterRefresh):WriterAccess
  @GET("api/articles") suspend fun articles(@Query("scope") scope:String,@Header("Authorization") bearer:String):WriterList
  @POST("api/articles") suspend fun change(@Header("Authorization") bearer:String,@Body change:WriterAction)
 }
 
-data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val error:String="",
+data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val restoring:Boolean=true,val error:String="",
  val articles:List<ArticleDto> = emptyList(),val editing:ArticleDto?=null,val editorOpen:Boolean=false)
 
-@HiltViewModel class WriterViewModel @Inject constructor(private val api:WriterApi):ViewModel(){
+@HiltViewModel class WriterViewModel @Inject constructor(
+ private val api:WriterApi,private val secureSession:SecureWriterSession
+):ViewModel(){
  val ui=MutableStateFlow(WriterUiState())
- // Deliberately ephemeral: never store the password or bearer token on disk.
  private var token:String?=null
- private var expiresAt:Long=0
- fun login(email:String,password:String){
+ private var expiresAt:Long=0L
+ init {
+  viewModelScope.launch {
+   val saved=secureSession.load()
+   if(saved.isNullOrBlank()){
+    ui.value=ui.value.copy(restoring=false)
+   }else {
+    try {
+     val result=api.refresh(WriterRefresh(refreshToken=saved))
+     require(result.accessToken.isNotBlank() && result.expiresAt>System.currentTimeMillis())
+     token=result.accessToken;expiresAt=result.expiresAt
+     ui.value=ui.value.copy(authorized=true,restoring=false)
+     reload()
+    }catch (_:Exception){
+     secureSession.clear()
+     ui.value=ui.value.copy(restoring=false,error="انتهت الجلسة المحفوظة. سجل الدخول مجددًا.")
+    }
+   }
+  }
+ }
+ fun login(email:String,password:String,remember:Boolean=true){
   if(ui.value.busy)return
   viewModelScope.launch{
    ui.value=ui.value.copy(busy=true,error="")
    try {
-    val session=api.login(WriterLogin(email.trim(),password))
-    require(session.accessToken.isNotBlank() && session.expiresAt>System.currentTimeMillis())
+    val session=api.login(WriterLogin(email.trim(),password,remember))
+    require(session.accessToken.isNotBlank()&&session.expiresAt>System.currentTimeMillis())
     token=session.accessToken;expiresAt=session.expiresAt
+    if(remember && !session.refreshToken.isNullOrBlank() && session.refreshExpiresAt>System.currentTimeMillis())
+     secureSession.save(session.refreshToken,session.refreshExpiresAt)
+    else secureSession.clear()
     ui.value=ui.value.copy(authorized=true,busy=false)
     reload()
    }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="تعذر تسجيل الدخول. تحقق من البيانات والاتصال.") }
   }
  }
- private fun credential():String {
-  check(token!=null&&System.currentTimeMillis()<expiresAt){"انتهت جلسة الكاتب"}
+ private suspend fun credential():String {
+  if(token.isNullOrBlank() || System.currentTimeMillis()>=expiresAt-60_000L){
+   val saved=secureSession.load()?:throw IllegalStateException("انتهت جلسة الكاتب")
+   val session=api.refresh(WriterRefresh(refreshToken=saved))
+   require(session.accessToken.isNotBlank()&&session.expiresAt>System.currentTimeMillis())
+   token=session.accessToken;expiresAt=session.expiresAt
+  }
   return "Bearer "+token
  }
  fun reload(){
@@ -67,7 +97,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    try{
     val articles=api.articles("admin",credential()).articles
     ui.value=ui.value.copy(articles=articles,busy=false,authorized=true)
-   }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="تعذر تحميل مقالات الكاتب. أعد تسجيل الدخول إذا انتهت الجلسة.")}
+   }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="تعذر تحميل المقالات؛ تحقق من الاتصال أو أعد تسجيل الدخول.")}
   }
  }
  fun edit(value:ArticleDto?){ui.value=ui.value.copy(editing=value,editorOpen=true,error="")}
@@ -92,7 +122,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="فشل الحذف. تحقق من الاتصال والصلاحية.")}
   }
  }
- fun logout(){token=null;expiresAt=0;ui.value=WriterUiState()}
+ fun logout(){secureSession.clear();token=null;expiresAt=0;ui.value=WriterUiState(restoring=false)}
  override fun onCleared(){token=null;super.onCleared()}
 }
 
@@ -100,6 +130,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  val state by vm.ui.collectAsState()
  var email by remember{mutableStateOf("")}
  var password by remember{mutableStateOf("")}
+ var remember by rememberSaveable{mutableStateOf(true)}
  Column(Modifier.fillMaxSize().padding(20.dp)){
   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
    Text("لوحة الكاتب",style=MaterialTheme.typography.headlineMedium)
@@ -107,12 +138,14 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   }
   if(state.error.isNotBlank())Text(state.error,color=MaterialTheme.colorScheme.error)
   if(state.busy)LinearProgressIndicator(Modifier.fillMaxWidth())
+  if(state.restoring){ Text("جار استعادة جلسة الكاتب المحفوظة…"); return@Column }
   if(!state.authorized){
    Spacer(Modifier.height(20.dp))
    Text("إدارة مقالات Neon من التطبيق. بيانات الكاتب محمية، ولا تُحفظ كلمة المرور.")
    OutlinedTextField(email,{email=it},label={Text("البريد الإداري")},singleLine=true,modifier=Modifier.fillMaxWidth(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Email))
    OutlinedTextField(password,{password=it},label={Text("كلمة المرور")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
-   Button(onClick={vm.login(email,password);password=""},enabled=!state.busy&&email.isNotBlank()&&password.isNotBlank()){Text("دخول الكاتب")}
+   Row(verticalAlignment=Alignment.CenterVertically){Text("تذكر دخولي بأمان على هذا الجهاز (30 يومًا)",Modifier.weight(1f));Switch(remember,onCheckedChange={remember=it})}
+   Button(onClick={vm.login(email,password,remember);password=""},enabled=!state.busy&&email.isNotBlank()&&password.isNotBlank()){Text("دخول الكاتب")}
   } else if(state.editorOpen){
    WriterEditor(state.editing,state.busy,vm::save,vm::closeEditor,vm::delete)
   } else {
