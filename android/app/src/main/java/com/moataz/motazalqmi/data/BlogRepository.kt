@@ -20,7 +20,10 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
-interface BlogApi { @GET("api/v1/sync") suspend fun snapshot(): Snapshot }
+interface BlogApi {
+ @GET("api/v1/sync")
+ suspend fun snapshot(@retrofit2.http.Header("If-None-Match") etag: String?): retrofit2.Response<Snapshot>
+}
 data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map<String, ReaderState> = emptyMap(),
  val sections: List<SectionDto> = emptyList(), val quotes: List<QuoteDto> = emptyList(),
  val available: Set<String> = emptySet(), val syncedAt: Long = 0, val about: String = "",
@@ -61,11 +64,18 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
   }
  } }
  suspend fun sync() = withContext(Dispatchers.IO) { syncMutex.withLock {
-  val snapshot = api.snapshot()
+  val previous = dao.metadataValue("sync_etag")?.takeIf { it.isNotBlank() }
+  val response = api.snapshot(previous)
+  if (response.code() == 304 && previous != null) {
+   dao.putMetadata(listOf(Metadata("synced_at", System.currentTimeMillis().toString())))
+   return@withLock
+  }
+  if (!response.isSuccessful) throw retrofit2.HttpException(response)
+  val snapshot = requireNotNull(response.body()) { "Missing snapshot" }
   require(snapshot.apiVersion == 1 && snapshot.complete && snapshot.mode == "snapshot") { "Incomplete snapshot" }
-  mutex.withLock { applySnapshot(snapshot, true) }
+  mutex.withLock { applySnapshot(snapshot, true, response.headers()["ETag"].orEmpty()) }
  } }
- private suspend fun applySnapshot(s: Snapshot, network: Boolean) {
+ private suspend fun applySnapshot(s: Snapshot, network: Boolean, etag: String = "") {
   require(s.articles.size <= 2000 && s.total == s.articles.size)
   require(s.articles.all { it.id.isNotBlank() && it.slug.isNotBlank() && it.status == "published" })
   require(s.articles.map { it.id }.toSet().size == s.articles.size)
@@ -77,7 +87,7 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
     Metadata("about", s.site["about"]?.toString() ?: ""),
     Metadata("site_name", s.site["name"]?.toString() ?: "مدونة معتز العلقمي"),
     Metadata("tagline", s.site["tagline"]?.toString() ?: "")) +
-    if (network) listOf(Metadata("synced_at", System.currentTimeMillis().toString())) else emptyList())
+    if (network) listOf(Metadata("synced_at", System.currentTimeMillis().toString()), Metadata("sync_etag", etag)) else emptyList())
    dao.prune()
   }
  }
@@ -95,7 +105,7 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
   val urls=current.flatMap { a -> listOf(a.coverImage,a.authorImage)+rx.findAll(a.content).map { it.groupValues[1] }.toList() }
    .filter {
     it.startsWith("https://")&&it.length<=2048&&
-     java.net.URI(it).path.orEmpty().substringAfterLast('.').lowercase() !in
+     runCatching { java.net.URI(it).path }.getOrNull().orEmpty().substringAfterLast('.').lowercase() !in
       setOf("mp4","webm","mp3","m4a","ogg","pdf")
    }.distinct().take(120)
   val loader=context.imageLoader
@@ -119,7 +129,11 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
   val state = dao.state(id) ?: ReaderState(id)
   dao.putState(state.copy(block = block, offset = offset, progress = value.coerceIn(0f, 1f), openedAt = System.currentTimeMillis()))
  }
- suspend fun cleanCache() = withContext(Dispatchers.IO) { mutex.withLock {
-  dao.clearUnsaved(); context.imageLoader.diskCache?.clear()
- } }
+ suspend fun cleanCache() = withContext(Dispatchers.IO) { syncMutex.withLock { mutex.withLock {
+  db.withTransaction {
+   dao.clearUnsaved()
+   dao.putMetadata(listOf(Metadata("sync_etag", "")))
+  }
+  context.imageLoader.diskCache?.clear()
+ } } }
 }

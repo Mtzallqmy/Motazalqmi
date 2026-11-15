@@ -28,6 +28,7 @@ data class ReaderState(@PrimaryKey val id: String, val saved: Boolean = false,
 data class Metadata(@PrimaryKey val key: String, val payload: String)
 @Dao
 interface BlogDao {
+ @Query("SELECT payload FROM metadata WHERE `key`=:key") suspend fun metadataValue(key: String): String?
  @Query("SELECT * FROM articles") fun articles(): Flow<List<ArticleEntity>>
  @Query("SELECT * FROM reader_state") fun states(): Flow<List<ReaderState>>
  @Query("SELECT * FROM metadata") fun metadata(): Flow<List<Metadata>>
