@@ -45,7 +45,10 @@ data class WriterList(val articles:List<ArticleDto> = emptyList())
 data class MediaDirectRequest(val mime:String,val base64:String,val purpose:String)
 data class MediaDirectResponse(val url:String="")
 data class WriterAction(val action:String,val expectedVersion:String?=null,val article:ArticleDto?=null,val id:String?=null)
+data class WriterProfile(val id:String="",val name:String="",val image:String="")
+data class WriterProfiles(val authors:List<WriterProfile> = emptyList())
 interface WriterApi {
+ @GET("api/v1/authors") suspend fun authors():WriterProfiles
  @POST("api/v1/media-ticket") suspend fun ticket(@Header("Authorization") bearer:String,@Body value:TicketRequest):UploadTicket
  @retrofit2.http.Headers("x-api-version: 13","x-vercel-blob-access: public")
  @retrofit2.http.PUT("https://vercel.com/api/blob/") suspend fun putBlob(@Query("pathname") path:String,
@@ -59,7 +62,7 @@ interface WriterApi {
 }
 
 data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val restoring:Boolean=true,val error:String="",
- val progress:Int?=null,val articles:List<ArticleDto> = emptyList(),val editing:ArticleDto?=null,val editorOpen:Boolean=false)
+ val profiles:List<WriterProfile> = emptyList(),val progress:Int?=null,val articles:List<ArticleDto> = emptyList(),val editing:ArticleDto?=null,val editorOpen:Boolean=false)
 
 @HiltViewModel class WriterViewModel @Inject constructor(
  private val api:WriterApi,private val secureSession:SecureWriterSession,
@@ -125,7 +128,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="تعذر تحميل المقالات؛ تحقق من الاتصال أو أعد تسجيل الدخول.")}
   }
  }
-private var uploadJob:kotlinx.coroutines.Job?=null
+ private var uploadJob:kotlinx.coroutines.Job?=null
  fun cancelUpload(){uploadJob?.cancel()}
  fun uploadMedia(uri:Uri,purpose:String,onDone:(String)->Unit){
   if(uploadJob?.isActive==true)return
@@ -140,7 +143,10 @@ private var uploadJob:kotlinx.coroutines.Job?=null
    finally{ui.value=ui.value.copy(busy=false,progress=null)}
   }
  }
- fun edit(value:ArticleDto?){ui.value=ui.value.copy(editing=value,editorOpen=true,error="")}
+ fun edit(value:ArticleDto?){
+  ui.value=ui.value.copy(editing=value,editorOpen=true,error="")
+  viewModelScope.launch { try{ui.value=ui.value.copy(profiles=api.authors().authors)}catch(_:java.io.IOException){}catch(_:retrofit2.HttpException){} }
+ }
  fun closeEditor(){ui.value=ui.value.copy(editorOpen=false,error="")}
  fun save(value:ArticleDto){
   viewModelScope.launch{
@@ -189,7 +195,7 @@ private var uploadJob:kotlinx.coroutines.Job?=null
    Row(verticalAlignment=Alignment.CenterVertically){Text("تذكر دخولي بأمان على هذا الجهاز (30 يومًا)",Modifier.weight(1f));Switch(remember,onCheckedChange={remember=it})}
    Button(onClick={vm.login(email,password,remember);password=""},enabled=!state.busy&&email.isNotBlank()&&password.isNotBlank()){Text("دخول الكاتب")}
   } else if(state.editorOpen){
-   WriterEditor(state.editing,remember(state.editing?.id){vm.recovery(state.editing?.id)},vm::keepDraft,state.busy,vm::save,vm::closeEditor,vm::delete,vm::uploadMedia)
+   WriterEditor(state.editing,remember(state.editing?.id){vm.recovery(state.editing?.id)},vm::keepDraft,state.profiles,state.busy,vm::save,vm::closeEditor,vm::delete,vm::uploadMedia)
   } else {
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
     Button(onClick={vm.edit(null)}){Text("مقال جديد")}
@@ -212,7 +218,7 @@ private var uploadJob:kotlinx.coroutines.Job?=null
  }
 }
 
-@Composable private fun WriterEditor(original:ArticleDto?,recovered:ArticleDto?,keep:(String?,ArticleDto)->Unit,busy:Boolean,save:(ArticleDto)->Unit,cancel:()->Unit,delete:(String)->Unit,uploadMedia:(Uri,String,(String)->Unit)->Unit){
+@Composable private fun WriterEditor(original:ArticleDto?,recovered:ArticleDto?,keep:(String?,ArticleDto)->Unit,profiles:List<WriterProfile>,busy:Boolean,save:(ArticleDto)->Unit,cancel:()->Unit,delete:(String)->Unit,uploadMedia:(Uri,String,(String)->Unit)->Unit){
  val initial=recovered?:original
  var title by rememberSaveable(initial?.id){mutableStateOf(initial?.title.orEmpty())}
  var author by rememberSaveable(initial?.id){mutableStateOf(initial?.author?:"معتز العلقمي")}
@@ -231,13 +237,22 @@ private var uploadJob:kotlinx.coroutines.Job?=null
  val context=LocalContext.current
  val markdown=remember(context){MarkdownEngine(context)}
 
+ var selectedAuthor by rememberSaveable(initial?.id){mutableStateOf(initial?.authorId.orEmpty())}
+ var start by rememberSaveable(initial?.id){mutableIntStateOf(content.length)}
+ var end by rememberSaveable(initial?.id){mutableIntStateOf(content.length)}
+ fun insertAtSelection(value:String){
+  val a=minOf(start,end).coerceIn(0,content.length)
+  val b=maxOf(start,end).coerceIn(a,content.length)
+  content=content.replaceRange(a,b,value)
+  start=a+value.length;end=start
+ }
  var selectedPurpose by remember{mutableStateOf("media")}
  val mediaPicker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->
   if(uri!=null)uploadMedia(uri,selectedPurpose){url->
    when(selectedPurpose){
     "cover"->cover=url
     "author"->authorImage=url
-    else->content+="\n\n![ملف مرفق]("+url+")\n\n"
+    else->insertAtSelection("\n\n![ملف مرفق]("+url+")\n\n")
    }
   }
  }
@@ -246,10 +261,16 @@ private var uploadJob:kotlinx.coroutines.Job?=null
   mediaPicker.launch(if(purpose=="cover"||purpose=="author")"image/*" else "*/*")
  }
  var confirm by remember{mutableStateOf(false)}
+ var confirmPublish by remember{mutableStateOf(false)}
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)){
   Text(if(original==null)"مقال جديد" else "تعديل المقال",style=MaterialTheme.typography.titleLarge)
   OutlinedTextField(title,{title=it.take(220)},label={Text("العنوان")},modifier=Modifier.fillMaxWidth())
-  OutlinedTextField(author,{author=it.take(150)},label={Text("اسم كاتب المقالة")},modifier=Modifier.fillMaxWidth())
+  if(profiles.isNotEmpty())Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)){
+   profiles.forEach { profile -> FilterChip(selected=selectedAuthor==profile.id,onClick={
+    selectedAuthor=profile.id;author=profile.name;authorImage=profile.image
+   },label={Text(profile.name)}) }
+  }
+  OutlinedTextField(author,{author=it.take(150);selectedAuthor=""},label={Text("اسم كاتب المقالة")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(authorImage,{authorImage=it.take(2048)},label={Text("رابط صورة الكاتب HTTPS")},modifier=Modifier.fillMaxWidth())
   OutlinedButton(onClick={pick("author")},enabled=!busy){Text("رفع صورة الكاتب من الهاتف (حتى 100 ميجابايت)")}
   if(authorImage.startsWith("https://")){
@@ -268,15 +289,15 @@ private var uploadJob:kotlinx.coroutines.Job?=null
   OutlinedButton(onClick={pick("media")},enabled=!busy){Text("إضافة مرفق من الجهاز (حتى 100 ميجابايت)")}
   Text("أدوات تنسيق المقال",style=MaterialTheme.typography.titleMedium)
   Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-   AssistChip(onClick={content+="\n## عنوان فرعي\n"},label={Text("عنوان")})
-   AssistChip(onClick={content+="**نص عريض**"},label={Text("عريض")})
-   AssistChip(onClick={content+="*نص مائل*"},label={Text("مائل")})
-   AssistChip(onClick={content+="\n> اقتباس أو بيت شعر\n"},label={Text("اقتباس")})
-   AssistChip(onClick={content+="\n- عنصر من القائمة\n"},label={Text("قائمة")})
-   AssistChip(onClick={content+="[عنوان الرابط](https://example.com)"},label={Text("رابط")})
-   AssistChip(onClick={content+="![وصف الصورة](https://example.com/photo.jpg)"},label={Text("صورة")})
-   AssistChip(onClick={content+="![عنوان الفيديو](https://example.com/video.mp4)"},label={Text("فيديو")})
-   AssistChip(onClick={content+="![تسجيل صوتي](https://example.com/audio.mp3)"},label={Text("صوت")})
+   AssistChip(onClick={insertAtSelection("\n## عنوان فرعي\n")},label={Text("عنوان")})
+   AssistChip(onClick={insertAtSelection("**نص عريض**")},label={Text("عريض")})
+   AssistChip(onClick={insertAtSelection("*نص مائل*")},label={Text("مائل")})
+   AssistChip(onClick={insertAtSelection("\n> اقتباس أو بيت شعر\n")},label={Text("اقتباس")})
+   AssistChip(onClick={insertAtSelection("\n- عنصر من القائمة\n")},label={Text("قائمة")})
+   AssistChip(onClick={insertAtSelection("[عنوان الرابط](https://example.com)")},label={Text("رابط")})
+   AssistChip(onClick={insertAtSelection("![وصف الصورة](https://example.com/photo.jpg)")},label={Text("صورة")})
+   AssistChip(onClick={insertAtSelection("![عنوان الفيديو](https://example.com/video.mp4)")},label={Text("فيديو")})
+   AssistChip(onClick={insertAtSelection("![تسجيل صوتي](https://example.com/audio.mp3)")},label={Text("صوت")})
   }
   Text("خط المقالة",style=MaterialTheme.typography.titleSmall)
   Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(5.dp)){
@@ -305,7 +326,8 @@ private var uploadJob:kotlinx.coroutines.Job?=null
     }
    })
   }else {
-   OutlinedTextField(content,{content=it.take(180000)},label={Text("النص الكامل (Markdown)")},minLines=12,modifier=Modifier.fillMaxWidth())
+   OutlinedTextField(androidx.compose.ui.text.input.TextFieldValue(content,androidx.compose.ui.text.TextRange(start.coerceIn(0,content.length),end.coerceIn(0,content.length))),
+    {if(it.text.length<=180000){content=it.text;start=it.selection.start;end=it.selection.end}},label={Text("النص الكامل (Markdown)")},minLines=12,modifier=Modifier.fillMaxWidth())
   }
   Row(verticalAlignment=Alignment.CenterVertically){
    Text("مقال مميّز",Modifier.weight(1f));Switch(featured,onCheckedChange={featured=it})
@@ -315,18 +337,21 @@ private var uploadJob:kotlinx.coroutines.Job?=null
    val articleSlug=slug.ifBlank{ "article-"+System.currentTimeMillis() }
    return (initial?:ArticleDto()).copy(title=title.trim(),slug=articleSlug,category=category,
     content=content,excerpt=excerpt,coverImage=cover,readTime=readTime,featured=featured,status=status,
-    author=author.trim(),authorId=initial?.authorId?.takeIf { initial.author==author.trim() }.orEmpty(),authorImage=authorImage.trim(),
+    author=author.trim(),authorId=selectedAuthor,authorImage=authorImage.trim(),
     publishDate=original?.publishDate?.takeIf{it.isNotBlank()} ?: java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US).format(java.util.Date()),
     tags=tags.split('،',',').map{it.trim()}.filter{it.isNotBlank()},fontFamily=fontFamily,fontSize=fontSize)
   }
-  LaunchedEffect(title,author,authorImage,slug,category,excerpt,readTime,content,cover,tags,featured,fontFamily,fontSize){
+  LaunchedEffect(title,author,selectedAuthor,authorImage,slug,category,excerpt,readTime,content,cover,tags,featured,fontFamily,fontSize){
    if(title.isNotBlank() || content.isNotBlank() || original!=null || recovered!=null)keep(original?.id,prepared("draft").copy(slug=slug))
   }
   Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-   Button(onClick={save(prepared("published"))},enabled=valid&&!busy){Text("نشر")}
+   Button(onClick={confirmPublish=true},enabled=valid&&!busy){Text("نشر")}
    OutlinedButton(onClick={save(prepared("draft"))},enabled=valid&&!busy){Text("مسودة")}
    TextButton(onClick=cancel){Text("إلغاء")}
   }
+  if(confirmPublish)AlertDialog(onDismissRequest={confirmPublish=false},title={Text("نشر المقالة للقراء؟")},
+   text={Text(title)},confirmButton={TextButton(onClick={confirmPublish=false;save(prepared("published"))}){Text("تأكيد النشر")}},
+   dismissButton={TextButton(onClick={confirmPublish=false}){Text("إلغاء")}})
   if(original!=null)TextButton(onClick={confirm=true},enabled=!busy){Text("حذف المقال",color=MaterialTheme.colorScheme.error)}
   Spacer(Modifier.height(28.dp))
  }
