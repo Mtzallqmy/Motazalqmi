@@ -16,9 +16,10 @@ import javax.inject.Inject
  val notice = MutableStateFlow("")
  private val initialized = MutableStateFlow(false)
  companion object { @Volatile var autoSyncEnabled: Boolean = true }
- init { viewModelScope.launch { try { repository.initialize(); initialized.value = true; if (autoSyncEnabled) sync() } catch (_: Exception) { notice.value = "تعذر تجهيز المكتبة المحلية" } } }
+ private fun mayAutoSync() = autoSyncEnabled && System.getProperty("motazalqmi.test.offline") != "true"
+ init { viewModelScope.launch { try { repository.initialize(); initialized.value = true; if (mayAutoSync()) sync() } catch (_: Exception) { notice.value = "تعذر تجهيز المكتبة المحلية" } } }
  fun syncIfStale() {
-  if (!autoSyncEnabled || !initialized.value) return
+  if (!mayAutoSync() || !initialized.value) return
   if(System.currentTimeMillis()-library.value.syncedAt>60_000L)sync()
  }
  fun sync() { if (busy.value) return; viewModelScope.launch {
