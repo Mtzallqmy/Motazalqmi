@@ -43,3 +43,24 @@ export function createMediaDirectHandler({putBlob=put}={}){
  };
 }
 export default createMediaDirectHandler();
+
+/** Scope a native writer upload to one new object, one declared MIME and a byte ceiling. */
+export function createTicketHandler(issue) {
+ return async function(req,res) {
+  noCache(res);
+  if(req.method!=='POST')return res.status(405).end();
+  if(!getAdmin(req)||!checkOrigin(req))return res.status(401).json({error:'تسجيل الدخول مطلوب.'});
+  const {mime,size,purpose,prefix}=req.body || {};
+  if(typeof mime!=='string'||!Object.hasOwn(allowed,mime)||!['cover','author','media'].includes(purpose)||
+     (purpose!=='media'&&!mime.startsWith('image/'))||!Number.isSafeInteger(size)||size<12||size>100*1024*1024||
+     typeof prefix!=='string'||prefix.length>64||!mediaMagic(Buffer.from(prefix,'base64'),mime))
+    return res.status(400).json({error:'صيغة الملف أو حجمه غير مدعوم.'});
+  const folder={cover:'covers',author:'authors',media:'media'}[purpose];
+  const pathname=folder+'/'+randomUUID()+'.'+allowed[mime];
+  try {
+   const token=await issue({pathname,allowedContentTypes:[mime],maximumSizeInBytes:size,validUntil:Date.now()+600000,
+    addRandomSuffix:false,allowOverwrite:false});
+   return res.status(200).json({pathname,token});
+  }catch{return res.status(503).json({error:'تعذّر تجهيز الرفع المباشر.'});}
+ };
+}
