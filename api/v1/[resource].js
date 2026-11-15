@@ -1,3 +1,4 @@
+import { studio } from '../../server/editorialStudio.js';
 import { discovery } from '../../server/articleDiscovery.js';
 import mobileAdminHandler from '../../server/mobileAdmin.js';
 import blobUploadHandler from '../../server/blobUpload.js';
@@ -14,6 +15,7 @@ export function createHandler({snapshot=publishedSnapshot,list=listPublished}={}
  return async function handler(req,res) {
   const resource=param(req,'resource',30);
   // Consolidated into this dynamic route to stay within Vercel Hobby's 12-function quota.
+  if(['authors','revisions','assets'].includes(resource)) return studio(req,res,resource);
   if(resource==='article-page'||resource==='sitemap') return discovery(req,res,resource);
   if(resource==='mobile-admin') return mobileAdminHandler(req,res);
   if(resource==='media-upload') return blobUploadHandler(req,res);

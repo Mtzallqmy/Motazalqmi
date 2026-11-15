@@ -13,7 +13,7 @@ export default async function handler(req,res){
   if(req.method==='GET'){
    const list=req.query.scope==='admin'
       ?await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles ORDER BY publish_date DESC,updated_at DESC LIMIT 500`
-      :await sql`SELECT id,slug,status,publish_date::text,data FROM blog_articles WHERE status='published' ORDER BY publish_date DESC,updated_at DESC LIMIT 500`;
+      :await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles WHERE status='published' ORDER BY publish_date DESC,updated_at DESC LIMIT 500`;
    return res.status(200).json({articles:list.map(articleRow),editorial:await editorial()});
   }
   if(JSON.stringify(req.body||'').length>240000)return res.status(413).json({error:'المقالة تتجاوز الحد المسموح.'});
@@ -37,6 +37,14 @@ export default async function handler(req,res){
   }
   if(req.body.action==='save'){
    const a=normalizeArticle(req.body.article),id=a.id||'art-'+randomUUID(),data=JSON.stringify({...a,id});
+   if (req.body.expectedVersion && a.id) {
+    const version=req.body.expectedVersion;
+    if(typeof version!=='string'||Number.isNaN(Date.parse(version)))return res.status(400).json({error:'نسخة المقالة غير صالحة.'});
+    const changed=await sql`UPDATE blog_articles SET slug=${a.slug},status=${a.status},publish_date=${a.publishDate}::date,
+      data=${data}::jsonb,updated_at=NOW() WHERE id=${id} AND updated_at=${version}::timestamptz RETURNING id`;
+    if(!changed.length)return res.status(409).json({error:'تغيّرت نسخة الخادم. نسخة عملك محفوظة على جهازك. راجع النسختين قبل النشر.'});
+    return res.status(200).json({id});
+   }
    await sql`INSERT INTO blog_articles(id,slug,status,publish_date,data) VALUES (${id},${a.slug},${a.status},${a.publishDate}::date,${data}::jsonb)
    ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug,status=EXCLUDED.status,publish_date=EXCLUDED.publish_date,data=EXCLUDED.data,updated_at=NOW()`;
    return res.status(200).json({id});

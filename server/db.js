@@ -18,7 +18,7 @@ export function normalizeArticle(a){
  if(coverImage&&!/^https:\/\//i.test(coverImage))throw new Error('رابط صورة الغلاف يجب أن يكون HTTPS.');
  if(authorImage&&!/^https:\/\//i.test(authorImage))throw new Error('صورة الكاتب يجب أن تكون HTTPS.');
  return {id,slug,title,content,status,publishDate,coverImage,category:str('category',60,'general'),
- excerpt:str('excerpt',1000),author:str('author',150,'معتز العلقمي'),authorImage,readTime:str('readTime',100,'5 دقائق'),
+ authorId:str('authorId',36),excerpt:str('excerpt',1000),author:str('author',150,'معتز العلقمي'),authorImage,readTime:str('readTime',100,'5 دقائق'),
  fontFamily:['amiri','naskh','tajawal'].includes(a.fontFamily)?a.fontFamily:'amiri',
  fontSize:Number.isInteger(a.fontSize)&&a.fontSize>=16&&a.fontSize<=32?a.fontSize:22,
  featured:a.featured===true,tags:Array.isArray(a.tags)?a.tags.filter(x=>typeof x==='string').slice(0,20).map(x=>x.slice(0,55)):[],
