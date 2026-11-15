@@ -10,7 +10,7 @@ data class ArticleDto(
  val publishDate: String = "", val coverImage: String = "", val featured: Boolean = false,
  val tags: List<String> = emptyList(), val status: String = "published",
  val readTime: String = "5 دقائق", val views: Int = 0, val likes: Int = 0,
- val updatedAt: String = "",val authorImage: String = "",val fontFamily: String = "amiri",val fontSize: Int = 22
+ val authorId:String = "", val updatedAt: String = "",val authorImage: String = "",val fontFamily: String = "amiri",val fontSize: Int = 22
 )
 data class SectionDto(val id: String = "", val title: String = "", val subtitle: String = "")
 data class QuoteDto(val id: String = "", val text: String = "", val author: String = "", val source: String = "")
@@ -28,6 +28,7 @@ data class ReaderState(@PrimaryKey val id: String, val saved: Boolean = false,
 data class Metadata(@PrimaryKey val key: String, val payload: String)
 @Dao
 interface BlogDao {
+ @Query("SELECT payload FROM metadata WHERE `key`=:key") suspend fun metadataValue(key: String): String?
  @Query("SELECT * FROM articles") fun articles(): Flow<List<ArticleEntity>>
  @Query("SELECT * FROM reader_state") fun states(): Flow<List<ReaderState>>
  @Query("SELECT * FROM metadata") fun metadata(): Flow<List<Metadata>>

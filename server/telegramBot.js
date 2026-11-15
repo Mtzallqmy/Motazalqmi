@@ -23,6 +23,8 @@ const slugify=title=>title.normalize('NFKC').toLowerCase().replace(/[\u064b-\u06
 const HELP=[
  'لوحة إدارة المدونة من تيليجرام 🔐',
  '/articles — المقالات المنشورة',
+ '/search الكلمات — البحث في عناوين المقالات',
+ '/author slug | اسم الكاتب',
  '/drafts — المسودات',
  '/stats — إحصاء المنشورات',
  '/show slug — تفاصيل المقالة',
@@ -137,6 +139,10 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
     const status=cmd.name==='drafts'?'draft':'published';
     const rows=await sql.query('SELECT slug,data FROM blog_articles WHERE status=$1 ORDER BY updated_at DESC LIMIT 20',[status]);
     await reply((status==='draft'?'📝 المسودات':'📰 المقالات')+'\n'+(rows.length?rows.map((r,i)=>(i+1)+'. '+r.data.title+'\n/show '+r.slug).join('\n\n'):'لا توجد مقالات'));
+   }else if(cmd.name==='search'){
+    if(!cmd.args||cmd.args.length>150)throw Error('اكتب كلمات البحث بعد /search');
+    const rows=await sql.query("SELECT slug,data->>'title' AS title,status FROM blog_articles WHERE strpos(lower(data->>'title'),lower($1))>0 ORDER BY updated_at DESC LIMIT 12",[cmd.args]);
+    await reply(rows.map(r=>r.title+'\n/show '+r.slug).join('\n\n')||'لا توجد نتائج.');
    }else if(cmd.name==='new'){
     const pos=cmd.args.indexOf('|');
     if(pos<1)throw Error('الصيغة: /new العنوان | النص الكامل');
@@ -154,15 +160,15 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
    }else if(['publish','unpublish','featured'].includes(cmd.name)){
     const a=await lookup(cmd.args);
     await done(await update(a,cmd.name==='featured'?{featured:!a.featured}:{status:cmd.name==='publish'?'published':'draft'}));
-   }else if(['title','text','excerpt','cover','category'].includes(cmd.name)){
+   }else if(['title','text','excerpt','cover','category','author'].includes(cmd.name)){
     const pos=cmd.args.indexOf('|');
     if(pos<1)throw Error('الصيغة: /'+cmd.name+' slug | القيمة الجديدة');
     const slug=cmd.args.slice(0,pos).trim(),value=cmd.args.slice(pos+1).trim();
     if(!value)throw Error('القيمة الجديدة لا يمكن أن تكون فارغة.');
     if(cmd.name==='cover'&&!/^https:\/\//i.test(value))throw Error('رابط الصورة يجب أن يبدأ بـ HTTPS.');
     const a=await lookup(slug);
-    const field={title:'title',text:'content',excerpt:'excerpt',cover:'coverImage',category:'category'}[cmd.name];
-    await done(await update(a,{[field]:value}));
+    const field={title:'title',text:'content',excerpt:'excerpt',cover:'coverImage',category:'category',author:'author'}[cmd.name];
+    await done(await update(a,{[field]:value,...(field==='author'?{authorId:'',authorImage:''}:{})}));
    }else if(cmd.name==='delete'){
     const a=await lookup(cmd.args);
     if(a.id.length>55)throw Error('معرف المقالة طويل؛ احذفها من الموقع.');

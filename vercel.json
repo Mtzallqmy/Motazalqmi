@@ -14,6 +14,14 @@
       "destination": "/api/v1/article?slug=:slug"
     },
     {
+      "source": "/articles/:slug",
+      "destination": "/api/v1/article-page?slug=:slug"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/v1/sitemap"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

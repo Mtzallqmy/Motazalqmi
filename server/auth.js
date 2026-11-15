@@ -50,7 +50,7 @@ export function getAdmin(req) {
  if(a.length!==b.length||!timingSafeEqual(a,b))return null;
  try{
   const decoded=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));
-  return decoded.email===process.env.ADMIN_EMAIL&&decoded.pwd===credentialVersion()&&decoded.exp>Date.now()?{email:decoded.email}:null;
+  return !decoded.aud&&decoded.email===process.env.ADMIN_EMAIL&&decoded.pwd===credentialVersion()&&decoded.exp>Date.now()?{email:decoded.email}:null;
  }catch{return null;}
 }
 export function sessionCookie(email,remember=true){

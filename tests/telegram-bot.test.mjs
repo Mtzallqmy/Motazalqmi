@@ -13,8 +13,8 @@ test('Telegram parses multiline Arabic and creates stable links',()=>{
  assert.equal(telegramCommand('not a command'),null);
  assert.equal(articleLink('نص عربي'), 'https://motazalqmi.vercel.app/articles/'+encodeURIComponent('نص عربي'));
 });
-test('Unauthorized Telegram messages never reach DB',async()=>{
- const h=createTelegramHandler({env,sqlFactory:()=>{throw Error('Unexpected DB access')}});
+test('Unauthorized Telegram messages cannot change articles',async()=>{
+ const h=createTelegramHandler({env,sqlFactory:()=>({query:async sql=>{assert.match(sql,/^SELECT data FROM blog_public_metadata/);return []}}),send:async()=>{throw Error('unexpected network request')}});
  const get=response();await h({method:'GET',headers:{}},get);assert.equal(get.code,405);
  const bad=response();await h({method:'POST',headers:{'x-telegram-bot-api-secret-token':'bad'},body:{}},bad);assert.equal(bad.code,403);
  const unauth=response();await h({method:'POST',headers:{'x-telegram-bot-api-secret-token':env.TELEGRAM_WEBHOOK_SECRET},

@@ -2,9 +2,8 @@ import { createHash } from 'node:crypto';
 import { database, articleRow } from './db.js';
 import { SITE, SECTIONS, QUOTES } from '../shared/publicContent.js';
 
-export function normalizeArabic(value='') {
-  return String(value).normalize('NFKD').replace(/[\u064b-\u065f\u0670\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').toLocaleLowerCase('ar');
-}
+import { normalizeArabic } from '../shared/arabicSearch.js';
+export { normalizeArabic };
 export async function publishedSnapshot(sql=database()) {
   // A single PostgreSQL statement sees one MVCC snapshot, including all article bodies.
   const rows=await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data

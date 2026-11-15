@@ -1,10 +1,14 @@
+import { studio } from '../../server/editorialStudio.js';
+import { discovery } from '../../server/articleDiscovery.js';
 import mobileAdminHandler from '../../server/mobileAdmin.js';
 import blobUploadHandler from '../../server/blobUpload.js';
-import mediaDirectHandler from '../../server/mediaDirect.js';
+import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
+import mediaDirectHandler, {createTicketHandler} from '../../server/mediaDirect.js';
 import telegramHandler from '../../server/telegramBot.js';
 import telegramPairHandler from '../../server/telegramPair.js';
 import {createHandler as createMediaHandler,imageHandler} from '../../server/mediaInventory.js';
 const mediaHandler=createMediaHandler();
+const ticketHandler=createTicketHandler(generateClientTokenFromReadWriteToken);
 import { publicGet, sendJson, publicError, listPublished, param, boundedInt } from '../../server/publicApi.js';
 import { pageSnapshot } from '../../server/contentSnapshot.js';
 import { publishedSnapshot } from '../../server/snapshot.js';
@@ -13,8 +17,11 @@ export function createHandler({snapshot=publishedSnapshot,list=listPublished}={}
  return async function handler(req,res) {
   const resource=param(req,'resource',30);
   // Consolidated into this dynamic route to stay within Vercel Hobby's 12-function quota.
+  if(['authors','revisions','assets'].includes(resource)) return studio(req,res,resource);
+  if(resource==='article-page'||resource==='sitemap') return discovery(req,res,resource);
   if(resource==='mobile-admin') return mobileAdminHandler(req,res);
   if(resource==='media-upload') return blobUploadHandler(req,res);
+  if(resource==='media-ticket') return ticketHandler(req,res);
   if(resource==='media-direct') return mediaDirectHandler(req,res);
   if(resource==='telegram') return telegramHandler(req,res);
   if(resource==='telegram-pair') return telegramPairHandler(req,res);

@@ -27,7 +27,7 @@ export function ArticlesProvider({children}){
   window.addEventListener('focus',refresh);
   return()=>{window.clearInterval(timer);document.removeEventListener('visibilitychange',refresh);window.removeEventListener('focus',refresh);};
  },[authLoading,isAdmin,load]);
- const save=async article=>{if(!isAdmin)throw new Error('صلاحية المدير مطلوبة.');const r=await api('/api/articles',{method:'POST',body:JSON.stringify({action:'save',article})});await load(true);return r.id;};
+ const save=async (article,expectedVersion)=>{if(!isAdmin)throw new Error('صلاحية المدير مطلوبة.');const r=await api('/api/articles',{method:'POST',body:JSON.stringify({action:'save',article,expectedVersion})});await load(true);return r.id;};
  const remove=async id=>{if(!isAdmin)throw new Error('صلاحية المدير مطلوبة.');await api('/api/articles',{method:'POST',body:JSON.stringify({action:'delete',id})});await load(true);};
  const importExamples=async()=>{if(!isAdmin||!isDemo)throw new Error('الاستيراد غير متاح.');await api('/api/articles',{method:'POST',body:JSON.stringify({action:'import',articles:INITIAL_ARTICLES})});await load(true);};
  const saveEditorial=async (tagline,about,editedQuotes)=>{

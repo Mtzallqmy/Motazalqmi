@@ -1,3 +1,4 @@
+import {StudioTools} from '../components/StudioTools';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -16,7 +17,7 @@ function blankArticle() {
     readTime:'5 دقائق', featured:false, tags:'الأدب العربي, ثقافة', fontFamily:'amiri', fontSize:22 };
 }
 function formFrom(article) {
-  return { title: article.title || '', slug:article.slug || '', author:article.author||AUTHOR, authorImage:article.authorImage||'', category:article.category || 'general',
+  return { title: article.title || '', slug:article.slug || '', authorId:article.authorId||'', author:article.author||'', authorImage:article.authorImage||'', category:article.category || 'general',
     excerpt:article.excerpt || '', content:article.content || '', coverImage:article.coverImage || DEFAULT_IMAGE,
     readTime:article.readTime || '5 دقائق', featured:Boolean(article.featured), tags:(article.tags || []).join(', '),
     fontFamily:article.fontFamily || 'amiri', fontSize:article.fontSize || 22 };
@@ -51,20 +52,41 @@ export function DashboardPage() {
    catch(e){setError(e.message||'تعذّر حفظ إعدادات المدونة.');}finally{setBusy(false);}
   };
   const editorRef = useRef(null);
-  const insertMedia=(markdown)=>{const target=editorRef.current;const start=target?.selectionStart??form.content.length;const end=target?.selectionEnd??start;change('content',form.content.slice(0,start)+'\n\n'+markdown+'\n\n'+form.content.slice(end));setPreview(false);};
+  const insertMedia=markdown=>{
+    const target=editorRef.current, content=formRef.current.content;
+    const start=target?.selectionStart??content.length,end=target?.selectionEnd??start;
+    const inserted='\n\n'+markdown+'\n\n';
+    change('content',content.slice(0,start)+inserted+content.slice(end));setPreview(false);
+    requestAnimationFrame(()=>{target?.setSelectionRange(start+inserted.length,start+inserted.length);});
+  };
 
   useEffect(() => { document.title = 'لوحة الكاتب | مدونة معتز العلقمي'; }, []);
+  const loaded = useRef(undefined);
+  const expectedVersion = useRef(null);
+  const draftKey = id => 'motaz-writer-v3:'+String(user?.email || '')+':'+(id || 'new');
+  const [draftNotice,setDraftNotice] = useState('');
   useEffect(() => {
-    const id = searchParams.get('edit');
-    if (!id) return;
-    const article = articles.find(a => a.id === id);
-    if (article) { setEditingId(id); setForm(formFrom(article)); setError(''); }
-  }, [searchParams, articles]);
-
+    const id = searchParams.get('edit') || null;
+    if (loaded.current === id) return;
+    const article = id ? articles.find(a => a.id === id) : null;
+    if (id && !article) return;
+    loaded.current = id;
+    let draft;
+    try { draft=JSON.parse(localStorage.getItem(draftKey(id)) || 'null'); } catch {}
+    expectedVersion.current=draft?.version || article?.updatedAt || null;
+    setEditingId(id);setForm(draft?.form || (article ? formFrom(article) : blankArticle()));
+    setDraftNotice(draft ? 'استُعيدت نسخة العمل المحفوظة على هذا الجهاز.' : '');
+  }, [searchParams, articles, user?.email]);
   const filtered = useMemo(() => articles.filter(a => filter === 'all' || (filter === 'draft' ? a.status === 'draft' : a.status !== 'draft')), [articles, filter]);
-  const change = (name, value) => setForm(f => ({...f, [name]:value}));
-  const clear = () => { setEditingId(null); setForm(blankArticle()); setError(''); setSuccess(''); if (searchParams.has('edit')) setSearchParams({}, {replace:true}); };
-  const edit = article => { setEditingId(article.id); setForm(formFrom(article)); setError(''); setSuccess(''); window.scrollTo({top:0,behavior:'smooth'}); };
+  const formRef=useRef(form);formRef.current=form;
+  const update = patch => {
+    const next={...formRef.current,...patch};formRef.current=next;setForm(next);
+    try {localStorage.setItem(draftKey(editingId),JSON.stringify({form:next,version:expectedVersion.current}));setDraftNotice('نسخة العمل محفوظة على هذا الجهاز.');}
+    catch {setDraftNotice('تعذر الحفظ المحلي. نزّل نسخة من النص أو احفظه في لوحة الكاتب.');}
+  };
+  const change = (name, value) => update({[name]:value,...(name==='author'?{authorId:''}:{})});
+  const clear = () => { loaded.current=undefined;setEditingId(null);setSearchParams({}, {replace:true});setError('');setSuccess(''); };
+  const edit = article => {setSearchParams({edit:article.id});setError('');setSuccess('');window.scrollTo({top:0});};
   const format = (before, after='') => {
     const target = editorRef.current;
     if (!target) return;
@@ -83,12 +105,13 @@ export function DashboardPage() {
     const old = articles.find(a => a.id === editingId);
     const item = { ...(old || {}), ...(editingId ? { id: editingId } : {}), title, slug,
       category: form.category, excerpt: form.excerpt.trim() || content.replace(/[#>*_]/g,'').slice(0,160)+'…',
-      content, coverImage: form.coverImage.trim() || DEFAULT_IMAGE, author: form.author.trim() || AUTHOR, authorImage:form.authorImage.trim(),
+      content, coverImage: form.coverImage.trim() || DEFAULT_IMAGE, authorId:form.authorId||'', author:form.author.trim(), authorImage:form.authorImage.trim(),
       publishDate: old?.publishDate || localeToday(), readTime:form.readTime.trim() || '5 دقائق',
       featured:form.featured, fontFamily:form.fontFamily, fontSize:Number(form.fontSize), status, tags:form.tags.split(/[,،]/).map(t=>t.trim()).filter(Boolean),
       views:old?.views || 0, likes:old?.likes || 0 };
+    if(status==='published' && !window.confirm('تأكيد نشر هذه النسخة للقراء؟')) return;
     setBusy(true);
-    try { await save(item); clear(); setSuccess(status === 'draft' ? 'حُفظت المسودة في قاعدة البيانات.' : 'نُشرت المقالة بنجاح.'); }
+    try { await save(item, expectedVersion.current); try { localStorage.removeItem(draftKey(editingId)); } catch {} clear(); setSuccess(status === 'draft' ? 'حُفظت المسودة في قاعدة البيانات.' : 'نُشرت المقالة بنجاح.'); }
     catch (e) { setError(e.message || 'تعذر حفظ المقالة.'); }
     finally { setBusy(false); }
   }
@@ -137,6 +160,14 @@ export function DashboardPage() {
       <section className="lg:col-span-7 rounded-3xl bg-white p-6 sm:p-8 border border-gold/40 shadow-soft" aria-labelledby="editor-title">
         <h2 id="editor-title" className="font-literature text-2xl font-bold text-teal flex items-center gap-2 mb-6"><Edit3 size={21} className="text-gold"/>{editingId ? 'تعديل المقالة' : 'كتابة مقالة جديدة'}</h2>
         <div className="space-y-5">
+          <StudioTools form={form} editingId={editingId} update={update} insert={insertMedia} restore={a=>update(formFrom(a))}/>
+          {draftNotice && <small role="status">{draftNotice}</small>}
+          {editingId && <div className="flex gap-3"><button type="button" onClick={()=>{
+            const copy={...form,title:form.title+' (نسخة)',slug:''};localStorage.setItem(draftKey(null),JSON.stringify({form:copy,version:null}));clear();
+          }}>إنشاء نسخة مستقلة</button><button type="button" onClick={()=>{
+            if(!window.confirm('استبدال نسخة العمل المحلية بأحدث نسخة من الخادم؟'))return;
+            const current=articles.find(a=>a.id===editingId);if(current){localStorage.removeItem(draftKey(editingId));expectedVersion.current=current.updatedAt;setForm(formFrom(current));setDraftNotice('فُتحت نسخة الخادم.');}
+          }}>إعادة فتح نسخة الخادم</button></div>}
           <label className="block text-sm font-bold">عنوان المقالة *<input value={form.title} onChange={e=>change('title',e.target.value)} maxLength={220} placeholder="مثال: جماليات الاستعارة في شعر أبي تمام" className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream"/></label>
           <div className="grid sm:grid-cols-3 gap-4">
             <label className="text-sm font-bold">القسم الثقافي<select value={form.category} onChange={e=>change('category',e.target.value)} className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream">{ARTICLE_CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</select></label>

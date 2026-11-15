@@ -32,6 +32,16 @@ class OfflineRepositoryTest {
   repeat(2){enqueue(snapshot(listOf(article.copy(content="النص المعدل"))));repo.sync()}
   val data=repo.library.first();assertEquals(1,data.articles.size);assertEquals("النص المعدل",data.articles.single().content);assertTrue(data.states.getValue("a").saved);assertEquals(321,data.states.getValue("a").offset)
  }
+ @Test fun unchangedSnapshotKeepsPositionAndUsesValidator()=runBlocking {
+  server.enqueue(MockResponse().setHeader("ETag","\"v1\"").setBody(gson.toJson(snapshot(listOf(article)))))
+  repo.sync()
+  repo.progress("a",0,180,0.25f)
+  server.enqueue(MockResponse().setResponseCode(304))
+  repo.sync()
+  server.takeRequest()
+  assertEquals("\"v1\"",server.takeRequest().getHeader("If-None-Match"))
+  assertEquals(180,repo.library.first().states.getValue("a").offset)
+ }
  @Test fun deletionAndCleanupPreserveSavedAndHistory()=runBlocking{
   enqueue(snapshot(listOf(article)));repo.sync();repo.progress("a",0,200,0.3f)
   enqueue(snapshot(emptyList()));repo.sync();repo.cleanCache()

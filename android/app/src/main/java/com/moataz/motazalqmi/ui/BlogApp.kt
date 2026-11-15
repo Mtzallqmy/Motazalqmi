@@ -120,19 +120,38 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
    Column(Modifier.weight(1f)) { Text("مكتبة الكلمة والفكرة", color = MaterialTheme.colorScheme.secondary); Title(library.siteName) }
    IconButton(onClick = sync, enabled = !busy) { Icon(Icons.Default.Sync, "تحديث المحتوى") }
   } }
-  item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(24.dp)) {
-   Column(Modifier.padding(26.dp)) { Text("أهلًا بك في رحاب الكلمة", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimary)
-    Text(library.tagline, Modifier.padding(top = 12.dp), fontFamily = Amiri, fontSize = 23.sp, color = MaterialTheme.colorScheme.onPrimary) }
+  val lead = published.firstOrNull { it.featured } ?: published.firstOrNull()
+  lead?.let { a -> item {
+   Card(onClick = { open(a.id) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
+    shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+    if (a.coverImage.isNotBlank()) Cover(a.coverImage, settings)
+    Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+     Text("في دائرة الضوء", style = MaterialTheme.typography.labelLarge)
+     Text(a.title, fontFamily = Amiri, fontSize = 32.sp, lineHeight = 46.sp)
+     Text(listOf(a.author, a.readTime).filter { it.isNotBlank() }.joinToString("  ·  "), style = MaterialTheme.typography.bodyMedium)
+    }
+   }
   } }
+  val recent = library.states.values.filter { it.progress > 0f && it.progress < 1f }.maxByOrNull { it.openedAt }
+  val resume = recent?.let { state -> library.articles.find { it.id == state.id } }
+  if (recent != null && resume != null) item {
+   OutlinedCard(onClick = { open(resume.id) }, modifier = Modifier.fillMaxWidth()) {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+     Text("متابعة القراءة", color = MaterialTheme.colorScheme.primary)
+     Text(resume.title, style = MaterialTheme.typography.titleLarge)
+     LinearProgressIndicator(progress = { recent.progress }, modifier = Modifier.fillMaxWidth())
+    }
+   }
+  }
   if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
   item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(library.sections, key = { it.id }) { c ->
    AssistChip(onClick = { section(c.id) }, label = { Text(c.title) }, leadingIcon = { Icon(Icons.Default.AutoStories, null, Modifier.size(16.dp)) })
   } } }
-  published.firstOrNull { it.featured }?.let { a -> item { Title("في دائرة الضوء"); ArticleCard(a, settings, open) } }
+
   library.quotes.firstOrNull()?.let { q -> item { QuoteCard(q, library.states[quoteId(q)]?.saved == true, {}, false) } }
   item { Title("أحدث الكتابات") }
   if (published.isEmpty()) item { Empty() }
-  items(published, key = { it.id }) { ArticleCard(it, settings, open) }
+  items(published.filter { it.id != lead?.id }, key = { it.id }) { ArticleCard(it, settings, open) }
  }
 }
 @Composable private fun ArticleCard(a: ArticleDto, settings: ReadingSettings, open: (String) -> Unit) {

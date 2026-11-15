@@ -1,6 +1,7 @@
+import {mediaExtensions,contentTypesForPath} from '../shared/mediaTypes.js';
 import {handleUpload} from '@vercel/blob/client';
 import {getAdmin,checkOrigin,noCache} from './auth.js';
-export const allowedMediaTypes=['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','audio/mpeg','audio/mp4','audio/ogg','application/pdf'];
+export const allowedMediaTypes=Object.keys(mediaExtensions);
 export const mediaMaxBytes=100*1024*1024;
 export function validMediaPath(path){
  return typeof path==='string'&&path.length<=240&&/^(media|authors|covers)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,180}$/.test(path)&&!path.includes('..');
@@ -16,8 +17,8 @@ export function createUploadHandler({handle=handleUpload}={}){
     request:req,body:req.body,
     onBeforeGenerateToken:async pathname=>{
      if(!getAdmin(req)||!checkOrigin(req))throw Error('AUTH_REQUIRED');
-     if(!validMediaPath(pathname))throw Error('INVALID_MEDIA_PATH');
-     return {allowedContentTypes:allowedMediaTypes,maximumSizeInBytes:mediaMaxBytes,
+     if(!validMediaPath(pathname)||!contentTypesForPath(pathname).length)throw Error('INVALID_MEDIA_PATH');
+     return {allowedContentTypes:contentTypesForPath(pathname),maximumSizeInBytes:mediaMaxBytes,
       addRandomSuffix:true,validUntil:Date.now()+10*60*1000};
     },
     onUploadCompleted:async ({blob})=>{

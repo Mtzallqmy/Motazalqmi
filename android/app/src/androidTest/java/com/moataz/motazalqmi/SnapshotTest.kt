@@ -19,7 +19,7 @@ import org.junit.runner.RunWith
  @Test fun snapshotUpdatesAreIdempotentAndPreserveSavedCopiesAndPosition() = runBlocking {
   val db = Room.inMemoryDatabaseBuilder(context,BlogDatabase::class.java).build()
   var remote = snapshot(listOf(article))
-  val api = object: BlogApi { override suspend fun snapshot() = remote }
+  val api = object: BlogApi { override suspend fun snapshot(etag: String?) = retrofit2.Response.success(remote) }
   val repository = BlogRepository(db,api,Gson(),context)
   try {
    repository.sync(); repository.toggleSaved("a"); repository.progress("a",0,240,.4f)
@@ -39,7 +39,7 @@ import org.junit.runner.RunWith
  @Test fun incompleteAndDraftResponsesCannotDestroyLocalData() = runBlocking {
   val db = Room.inMemoryDatabaseBuilder(context,BlogDatabase::class.java).build()
   var remote = snapshot(listOf(article))
-  val repository = BlogRepository(db,object:BlogApi { override suspend fun snapshot() = remote },Gson(),context)
+  val repository = BlogRepository(db,object:BlogApi { override suspend fun snapshot(etag: String?) = retrofit2.Response.success(remote) },Gson(),context)
   try {
    repository.sync()
    remote = snapshot(emptyList()).copy(complete=false)
