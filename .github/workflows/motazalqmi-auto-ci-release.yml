@@ -1,0 +1,204 @@
+name: Motaz Alalqami 3.0 Auto CI & Verified Release
+on:
+  push:
+    branches: [main, feat/motazalqami-ultimate-experience]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish signed v3.0.0 if all validations pass
+        type: boolean
+        required: false
+        default: false
+concurrency:
+  group: motazalqmi-v3-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: write
+jobs:
+  web:
+    name: Web tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+  android:
+    name: Native Android build, unit tests and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_MANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          "$SDK_MANAGER" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Assemble and test
+        run: gradle -p android :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon -PmotazArm64Only=true
+      - name: Verify debug package, Android 8 minimum, and ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > android/debug-package.txt
+          grep -F "package: name='com.moataz.motazalqmi'" android/debug-package.txt
+          grep -F "sdkVersion:'26'" android/debug-package.txt
+          unzip -Z1 "$APK" > android/debug-apk-file-list.txt
+          grep -Eq '^lib/arm64-v8a/.*[.]so$' android/debug-apk-file-list.txt
+          if grep -Eq '^lib/(armeabi|armeabi-v7a|x86|x86_64)/' android/debug-apk-file-list.txt; then exit 1; fi
+          sha256sum "$APK" > android/DEBUG-SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Motazalqmi-v3-ARM64-Debug-APK
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/debug-package.txt
+            android/DEBUG-SHA256SUMS
+          retention-days: 30
+  device:
+    name: Instrumented Android API ${{ matrix.api }}
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 28, 29]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          disable-animations: true
+          script: |
+            gradle -p android connectedDebugAndroidTest -PtestAbi=x86_64 --no-daemon
+            adb pull /sdcard/Android/data/com.moataz.motazalqmi/files/screenshots android/device-screenshots || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Motazalqmi-v3-Emulator-API-${{ matrix.api }}
+          path: |
+            android/app/build/reports/androidTests/
+            android/device-screenshots/
+  signed:
+    name: Signed official release after validation
+    needs: [web, device]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Prepare signing only if every secret is provided
+        env:
+          STORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$STORE_BASE64" && -n "$STORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]]; then
+            umask 077
+            printf '%s' "$STORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            echo 'SIGNING_READY=yes' >> "$GITHUB_ENV"
+          else
+            echo 'No release signing secrets; signed APK is intentionally withheld.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Compile signed ARM64 release
+        if: env.SIGNING_READY == 'yes'
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle -p android :app:assembleRelease --no-daemon -PmotazArm64Only=true
+      - name: Enforce old signature continuity before publishing
+        if: env.SIGNING_READY == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/baseline-release
+          gh release download v2.0.0 -p '*.apk' -D android/baseline-release
+          BASELINE="$(find android/baseline-release -maxdepth 1 -name '*.apk' -type f | head -1)"
+          test -n "$BASELINE"
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$SIGNER" verify --verbose --print-certs "$APK" | tee android/signature.txt
+          OLD="$("$SIGNER" verify --print-certs "$BASELINE" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          NEW="$("$SIGNER" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          test -n "$OLD" && test "$OLD" = "$NEW"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > android/package.txt
+          grep -F "package: name='com.moataz.motazalqmi'" android/package.txt
+          grep -F "sdkVersion:'26'" android/package.txt
+          unzip -Z1 "$APK" > android/release-file-list.txt
+          grep -Eq '^lib/arm64-v8a/.*[.]so$' android/release-file-list.txt
+          if grep -Eq '^lib/(armeabi|armeabi-v7a|x86|x86_64)/' android/release-file-list.txt; then exit 1; fi
+          cp "$APK" android/Motazalqmi-v3.0.0-ARM64.apk
+          (cd android && sha256sum Motazalqmi-v3.0.0-ARM64.apk > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        if: env.SIGNING_READY == 'yes'
+        with:
+          name: Motazalqmi-v3.0.0-Signed-APK
+          path: |
+            android/Motazalqmi-v3.0.0-ARM64.apk
+            android/SHA256SUMS
+            android/signature.txt
+            android/package.txt
+      - name: Publish official v3.0.0 only on approved dispatch
+        if: env.SIGNING_READY == 'yes' && github.event_name == 'workflow_dispatch' && inputs.publish_release == true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v3.0.0 android/Motazalqmi-v3.0.0-ARM64.apk android/SHA256SUMS android/signature.txt --title 'Motazalqmi 3.0.0 ARM64' --notes 'Validated on Android API 26, 28 and 29 with signing certificate matching v2.0.0.'
+      - if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"

@@ -10,6 +10,7 @@ import androidx.room.Room
 import androidx.work.*
 import com.google.gson.Gson
 import com.moataz.motazalqmi.data.*
+import com.moataz.motazalqmi.ui.BlogViewModel
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -30,6 +31,8 @@ import javax.inject.Singleton
   .build()
  override fun onCreate() {
   super.onCreate()
+  // Instrumentation runs must not schedule WorkManager's immediate network sync.
+  if (System.getProperty("motazalqmi.test.offline") == "true" || !BlogViewModel.autoSyncEnabled) return
   val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).setRequiresBatteryNotLow(true).build()
   val work = PeriodicWorkRequestBuilder<SyncWorker>(6, TimeUnit.HOURS)
    .setConstraints(constraints).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()

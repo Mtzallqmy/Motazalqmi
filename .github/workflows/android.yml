@@ -1,7 +1,7 @@
 name: Android Premium Native
 on:
   push:
-    branches: [main, feat/motazalqami-android-premium-v2]
+    branches: [main, feat/motazalqami-ultimate-experience, feat/motazalqami-android-premium-v2]
     paths: ['android/**', '.github/workflows/android.yml']
   pull_request:
     paths: ['android/**', '.github/workflows/android.yml']

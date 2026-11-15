@@ -14,8 +14,12 @@ import javax.inject.Inject
  val settings = preferences.flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReadingSettings())
  val busy = MutableStateFlow(false)
  val notice = MutableStateFlow("")
- init { viewModelScope.launch { try { repository.initialize(); sync() } catch (_: Exception) { notice.value = "تعذر تجهيز المكتبة المحلية" } } }
+ private val initialized = MutableStateFlow(false)
+ companion object { @Volatile var autoSyncEnabled: Boolean = true }
+ private fun mayAutoSync() = autoSyncEnabled && System.getProperty("motazalqmi.test.offline") != "true"
+ init { viewModelScope.launch { try { repository.initialize(); initialized.value = true; if (mayAutoSync()) sync() } catch (_: Exception) { notice.value = "تعذر تجهيز المكتبة المحلية" } } }
  fun syncIfStale() {
+  if (!mayAutoSync() || !initialized.value) return
   if(System.currentTimeMillis()-library.value.syncedAt>60_000L)sync()
  }
  fun sync() { if (busy.value) return; viewModelScope.launch {
