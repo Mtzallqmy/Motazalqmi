@@ -1,13 +1,13 @@
-name: Motaz Alalqami 3.0 Auto CI & Verified Release
+name: Motaz Alalqami 3.1 Auto CI & Verified Release
 on:
   push:
-    branches: [main, feat/motazalqami-ultimate-experience]
+    branches: [main, feat/motazalqami-ultimate-experience, feat/motazalqmi-native-editorial-v31]
   pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
       publish_release:
-        description: Publish signed v3.0.0 if all validations pass
+        description: Publish signed v3.1.0 if all validations pass
         type: boolean
         required: false
         default: false
@@ -183,22 +183,22 @@ jobs:
           unzip -Z1 "$APK" > android/release-file-list.txt
           grep -Eq '^lib/arm64-v8a/.*[.]so$' android/release-file-list.txt
           if grep -Eq '^lib/(armeabi|armeabi-v7a|x86|x86_64)/' android/release-file-list.txt; then exit 1; fi
-          cp "$APK" android/Motazalqmi-v3.0.0-ARM64.apk
-          (cd android && sha256sum Motazalqmi-v3.0.0-ARM64.apk > SHA256SUMS)
+          cp "$APK" android/Motazalqmi-v3.1.0-ARM64.apk
+          (cd android && sha256sum Motazalqmi-v3.1.0-ARM64.apk > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         if: env.SIGNING_READY == 'yes'
         with:
-          name: Motazalqmi-v3.0.0-Signed-APK
+          name: Motazalqmi-v3.1.0-Signed-APK
           path: |
-            android/Motazalqmi-v3.0.0-ARM64.apk
+            android/Motazalqmi-v3.1.0-ARM64.apk
             android/SHA256SUMS
             android/signature.txt
             android/package.txt
-      - name: Publish official v3.0.0 only on approved dispatch
+      - name: Publish official v3.1.0 only on approved dispatch
         if: env.SIGNING_READY == 'yes' && github.event_name == 'workflow_dispatch' && inputs.publish_release == true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v3.0.0 android/Motazalqmi-v3.0.0-ARM64.apk android/SHA256SUMS android/signature.txt --title 'Motazalqmi 3.0.0 ARM64' --notes 'Validated on Android API 26, 28 and 29 with signing certificate matching v2.0.0.'
+          gh release create v3.1.0 android/Motazalqmi-v3.1.0-ARM64.apk android/SHA256SUMS android/signature.txt --title 'Motazalqmi 3.1.0 ARM64' --notes 'Validated on Android API 26, 28 and 29 with signing certificate matching v2.0.0.'
       - if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"

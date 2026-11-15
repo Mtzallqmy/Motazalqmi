@@ -17,8 +17,8 @@ android {
   if (project.findProperty('motazArm64Only') == 'true') {
    ndk { abiFilters 'arm64-v8a' }
   }
-  versionCode 30000
-  versionName '3.0.0'
+  versionCode 30100
+  versionName '3.1.0'
   testInstrumentationRunner 'com.moataz.motazalqmi.OfflineAndroidJUnitRunner'
  }
  buildFeatures { compose true; buildConfig true }
@@ -39,7 +39,7 @@ android {
   // production-signed app and therefore never requires deleting its data.
   debug {
    if (project.findProperty('motazSeparatePreview') == 'true') {
-    applicationIdSuffix '.preview3'
+    applicationIdSuffix '.preview31'
     versionNameSuffix '-standalone'
    }
   }

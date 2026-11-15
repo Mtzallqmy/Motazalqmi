@@ -113,59 +113,9 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
   Text(text, Modifier.padding(top = 16.dp), style = MaterialTheme.typography.bodyLarge)
  }
 }
-@Composable private fun Home(library: Library, settings: ReadingSettings, busy: Boolean, sync: () -> Unit, open: (String) -> Unit, section: (String) -> Unit) {
- val published = library.articles.filter { it.id in library.available }
- LazyColumn(Modifier.fillMaxSize().testTag("home-feed"), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-  item { Row(verticalAlignment = Alignment.CenterVertically) {
-   Column(Modifier.weight(1f)) { Text("مكتبة الكلمة والفكرة", color = MaterialTheme.colorScheme.secondary); Title(library.siteName) }
-   IconButton(onClick = sync, enabled = !busy) { Icon(Icons.Default.Sync, "تحديث المحتوى") }
-  } }
-  val lead = published.firstOrNull { it.featured } ?: published.firstOrNull()
-  lead?.let { a -> item {
-   Card(onClick = { open(a.id) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-    shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("featured-article-${a.id}")) {
-    if (a.coverImage.isNotBlank()) Cover(a.coverImage, settings)
-    Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-     Text("في دائرة الضوء", style = MaterialTheme.typography.labelLarge)
-     Text(a.title, fontFamily = Amiri, fontSize = 32.sp, lineHeight = 46.sp)
-     Text(listOf(a.author, a.readTime).filter { it.isNotBlank() }.joinToString("  ·  "), style = MaterialTheme.typography.bodyMedium)
-    }
-   }
-  } }
-  val recent = library.states.values.filter { it.progress > 0f && it.progress < 1f }.maxByOrNull { it.openedAt }
-  val resume = recent?.let { state -> library.articles.find { it.id == state.id } }
-  if (recent != null && resume != null) item {
-   OutlinedCard(onClick = { open(resume.id) }, modifier = Modifier.fillMaxWidth()) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-     Text("متابعة القراءة", color = MaterialTheme.colorScheme.primary)
-     Text(resume.title, style = MaterialTheme.typography.titleLarge)
-     LinearProgressIndicator(progress = { recent.progress }, modifier = Modifier.fillMaxWidth())
-    }
-   }
-  }
-  if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-  item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(library.sections, key = { it.id }) { c ->
-   AssistChip(onClick = { section(c.id) }, label = { Text(c.title) }, leadingIcon = { Icon(Icons.Default.AutoStories, null, Modifier.size(16.dp)) })
-  } } }
-
-  library.quotes.firstOrNull()?.let { q -> item { QuoteCard(q, library.states[quoteId(q)]?.saved == true, {}, false) } }
-  item { Title("أحدث الكتابات") }
-  if (published.isEmpty()) item { Empty() }
-  items(published.filter { it.id != lead?.id }, key = { it.id }) { ArticleCard(it, settings, open) }
- }
-}
-@Composable private fun ArticleCard(a: ArticleDto, settings: ReadingSettings, open: (String) -> Unit) {
- Card(onClick = { open(a.id) }, modifier = Modifier.fillMaxWidth().testTag("article-card-${a.id}"), shape = RoundedCornerShape(20.dp)) {
-  Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-   Cover(a.coverImage, settings)
-   Text(a.publishDate + "  ·  " + a.author, color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
-   Text(a.title, style = MaterialTheme.typography.headlineSmall.copy(fontFamily = Amiri), lineHeight = 36.sp)
-   Text(a.excerpt, maxLines = 3, style = MaterialTheme.typography.bodyMedium, lineHeight = 26.sp)
-   Text("تابع القراءة  ←", color = MaterialTheme.colorScheme.primary)
-  }
- }
-}
-@Composable private fun Cover(url: String, settings: ReadingSettings) {
+@Composable private fun Home(library: Library, settings: ReadingSettings, busy: Boolean, sync: () -> Unit, open: (String) -> Unit, section: (String) -> Unit) { EditorialHome(library, settings, busy, sync, open, section) }
+@Composable private fun ArticleCard(a: ArticleDto, settings: ReadingSettings, open: (String) -> Unit) { EditorialArticleCard(a, settings, open) }
+@Composable internal fun Cover(url: String, settings: ReadingSettings) {
  val context = LocalContext.current
  val cm = context.getSystemService(ConnectivityManager::class.java)
  val wifi = cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
@@ -378,6 +328,7 @@ private object MaterialColors { val link = android.graphics.Color.rgb(104, 142, 
   OutlinedButton({ confirm = true }) { Text("تنظيف المحتوى غير المحفوظ والصور المؤقتة") }
   TextButton(about) { Text("حول المدونة والتطبيق") }
   OutlinedButton(onClick = writer) { Icon(Icons.Default.Edit, null); Text("لوحة الكاتب — إدارة المقالات") }
+  Text("الجديد في تجربة 3.1: واجهة مجلة عربية، وأبواب قراءة تفاعلية، وبطاقات جديدة.")
   Text("الإصدار ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) • Android 8+")
   Title("سياسة الخصوصية")
   Text("تُحفظ المحفوظات وسجل القراءة والإعدادات على جهازك. لا يطلب التطبيق جهات الاتصال أو الموقع. تُرسل طلبات قراءة المحتوى إلى الموقع الرسمي عبر HTTPS، وقد تحتفظ الاستضافة بسجلات الاتصال المعتادة. تُحمّل أغلفة المقالات من روابطها الخارجية وفق إعداد Wi-Fi. لا يضم التطبيق أدوات إعلانات أو تحليلات. لوحة الكاتب تتطلب مصادقة مستقلة وآمنة.", lineHeight = 28.sp)
