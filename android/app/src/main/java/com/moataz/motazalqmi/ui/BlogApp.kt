@@ -123,7 +123,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
   val lead = published.firstOrNull { it.featured } ?: published.firstOrNull()
   lead?.let { a -> item {
    Card(onClick = { open(a.id) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-    shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+    shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("featured-article-${a.id}")) {
     if (a.coverImage.isNotBlank()) Cover(a.coverImage, settings)
     Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
      Text("في دائرة الضوء", style = MaterialTheme.typography.labelLarge)
@@ -155,7 +155,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
  }
 }
 @Composable private fun ArticleCard(a: ArticleDto, settings: ReadingSettings, open: (String) -> Unit) {
- Card(onClick = { open(a.id) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+ Card(onClick = { open(a.id) }, modifier = Modifier.fillMaxWidth().testTag("article-card-${a.id}"), shape = RoundedCornerShape(20.dp)) {
   Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
    Cover(a.coverImage, settings)
    Text(a.publishDate + "  ·  " + a.author, color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)

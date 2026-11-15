@@ -1,19 +1,36 @@
 package com.moataz.motazalqmi
+
+import android.graphics.Bitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
-import android.graphics.Bitmap
+import com.moataz.motazalqmi.ui.BlogViewModel
 import java.io.File
+import org.junit.AfterClass
+import org.junit.BeforeClass
 import org.junit.Rule
 import org.junit.Test
+
 class ReaderUiTest {
+ companion object {
+  @JvmStatic @BeforeClass
+  fun disableAutoSyncForDeterministicOfflineTests() {
+   BlogViewModel.autoSyncEnabled = false
+  }
+  @JvmStatic @AfterClass
+  fun restoreAutoSync() {
+   BlogViewModel.autoSyncEnabled = true
+  }
+ }
  @get:Rule val rule = createAndroidComposeRule<MainActivity>()
  private fun capture(name: String) {
   rule.waitForIdle()
-  val instrumentation=InstrumentationRegistry.getInstrumentation()
-  val bitmap=instrumentation.uiAutomation.takeScreenshot() ?: return
-  val file=File(instrumentation.targetContext.getExternalFilesDir(null),"screenshots/$name.png")
-  file.parentFile?.mkdirs();file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+  val instrumentation = InstrumentationRegistry.getInstrumentation()
+  val bitmap = instrumentation.uiAutomation.takeScreenshot() ?: return
+  val file = File(instrumentation.targetContext.getExternalFilesDir(null), "screenshots/$name.png")
+  file.parentFile?.mkdirs()
+  file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+  bitmap.recycle()
  }
  @Test fun readerNavigationOpensLocalLibraryAndSettings() {
   rule.onNodeWithText("مكتبتي").performClick()
@@ -23,16 +40,25 @@ class ReaderUiTest {
   capture("settings")
  }
  @Test fun publishedSeedArticleCanBeOpenedAndBookmarked() {
-  val title="سحر البيان في معلقة امرئ القيس: قراءة في هندسة الصورة الشعرية"
-  rule.waitUntil(15000) { rule.onAllNodesWithText("في دائرة الضوء").fetchSemanticsNodes().isNotEmpty() }
-  rule.onNodeWithTag("home-feed").performScrollToNode(hasText(title))
-  rule.onAllNodesWithText(title).onFirst().performClick()
+  val seedId = "seed-1"
+  val featuredTag = "featured-article-$seedId"
+  val savedCardTag = "article-card-$seedId"
+  rule.waitUntil(20000) {
+   rule.onAllNodesWithTag(featuredTag).fetchSemanticsNodes().isNotEmpty()
+  }
+  rule.onNodeWithTag("home-feed").performScrollToNode(hasTestTag(featuredTag))
+  rule.onNodeWithTag(featuredTag).assertIsDisplayed().performClick()
+  rule.waitUntil(10000) {
+   rule.onAllNodesWithContentDescription("حفظ للقراءة لاحقًا").fetchSemanticsNodes().isNotEmpty()
+  }
   rule.onNodeWithContentDescription("حفظ للقراءة لاحقًا").assertIsDisplayed().performClick()
   capture("reader")
   rule.onNodeWithContentDescription("رجوع").performClick()
   rule.onNodeWithText("مكتبتي").performClick()
-  rule.waitUntil(5000) { rule.onAllNodesWithText(title).fetchSemanticsNodes().isNotEmpty() }
-  rule.onNodeWithTag("saved-feed").performScrollToNode(hasText(title))
-  rule.onNodeWithText(title).assertIsDisplayed()
+  rule.waitUntil(10000) {
+   rule.onAllNodesWithTag(savedCardTag).fetchSemanticsNodes().isNotEmpty()
+  }
+  rule.onNodeWithTag("saved-feed").performScrollToNode(hasTestTag(savedCardTag))
+  rule.onNodeWithTag(savedCardTag).assertIsDisplayed()
  }
 }
