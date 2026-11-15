@@ -76,7 +76,7 @@ private val Brass = Color(0xFFF0D38D)
     Card(onClick = { open(lead.id) }, modifier = Modifier.fillMaxWidth().testTag("featured-article-" + lead.id), shape = RoundedCornerShape(25.dp),
      colors = CardDefaults.cardColors(containerColor = Emerald)) {
      Column {
-      EditorialCover(lead.coverImage, settings)
+      Cover(lead.coverImage, settings)
       Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xFF1C6658), Color(0xFF082B27)))).padding(21.dp),
        verticalArrangement = Arrangement.spacedBy(11.dp)) {
        Text("✦  قراءة مختارة", color = Brass, style = MaterialTheme.typography.labelLarge)
@@ -129,7 +129,7 @@ private val Brass = Color(0xFFF0D38D)
  OutlinedCard(onClick = { open(a.id) }, modifier = Modifier.fillMaxWidth().testTag("article-card-" + a.id),
   shape = RoundedCornerShape(22.dp), colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)) {
   Column {
-   EditorialCover(a.coverImage, settings)
+   Cover(a.coverImage, settings)
    Column(Modifier.padding(19.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
     Text(a.author + "  •  " + a.publishDate, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
     Text(a.title, fontFamily = Amiri, fontSize = 25.sp, lineHeight = 37.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)

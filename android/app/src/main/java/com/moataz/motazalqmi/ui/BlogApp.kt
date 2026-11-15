@@ -115,7 +115,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
 }
 @Composable private fun Home(library: Library, settings: ReadingSettings, busy: Boolean, sync: () -> Unit, open: (String) -> Unit, section: (String) -> Unit) { EditorialHome(library, settings, busy, sync, open, section) }
 @Composable private fun ArticleCard(a: ArticleDto, settings: ReadingSettings, open: (String) -> Unit) { EditorialArticleCard(a, settings, open) }
-@Composable internal fun EditorialCover(url: String, settings: ReadingSettings) {
+@Composable internal fun Cover(url: String, settings: ReadingSettings) {
  val context = LocalContext.current
  val cm = context.getSystemService(ConnectivityManager::class.java)
  val wifi = cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
