@@ -2,11 +2,7 @@ import {put} from '@vercel/blob';
 import {randomUUID} from 'node:crypto';
 import {getAdmin,checkOrigin,noCache} from './auth.js';
 
-const allowed={
- 'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif',
- 'video/mp4':'mp4','video/webm':'webm','audio/mpeg':'mp3','audio/mp4':'m4a',
- 'audio/ogg':'ogg','application/pdf':'pdf'
-};
+import {mediaExtensions as allowed} from '../shared/mediaTypes.js';
 export const nativeMaxBytes=1800000;
 export function mediaMagic(bytes,mime){
  if(!Buffer.isBuffer(bytes)||bytes.length<12)return false;

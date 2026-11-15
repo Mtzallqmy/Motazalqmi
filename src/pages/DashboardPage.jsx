@@ -52,7 +52,13 @@ export function DashboardPage() {
    catch(e){setError(e.message||'تعذّر حفظ إعدادات المدونة.');}finally{setBusy(false);}
   };
   const editorRef = useRef(null);
-  const insertMedia=(markdown)=>{const target=editorRef.current;const start=target?.selectionStart??form.content.length;const end=target?.selectionEnd??start;change('content',form.content.slice(0,start)+'\n\n'+markdown+'\n\n'+form.content.slice(end));setPreview(false);};
+  const insertMedia=markdown=>{
+    const target=editorRef.current, content=formRef.current.content;
+    const start=target?.selectionStart??content.length,end=target?.selectionEnd??start;
+    const inserted='\n\n'+markdown+'\n\n';
+    change('content',content.slice(0,start)+inserted+content.slice(end));setPreview(false);
+    requestAnimationFrame(()=>{target?.setSelectionRange(start+inserted.length,start+inserted.length);});
+  };
 
   useEffect(() => { document.title = 'لوحة الكاتب | مدونة معتز العلقمي'; }, []);
   const loaded = useRef(undefined);
@@ -156,6 +162,12 @@ export function DashboardPage() {
         <div className="space-y-5">
           <StudioTools form={form} editingId={editingId} update={update} insert={insertMedia} restore={a=>update(formFrom(a))}/>
           {draftNotice && <small role="status">{draftNotice}</small>}
+          {editingId && <div className="flex gap-3"><button type="button" onClick={()=>{
+            const copy={...form,title:form.title+' (نسخة)',slug:''};localStorage.setItem(draftKey(null),JSON.stringify({form:copy,version:null}));clear();
+          }}>إنشاء نسخة مستقلة</button><button type="button" onClick={()=>{
+            if(!window.confirm('استبدال نسخة العمل المحلية بأحدث نسخة من الخادم؟'))return;
+            const current=articles.find(a=>a.id===editingId);if(current){localStorage.removeItem(draftKey(editingId));expectedVersion.current=current.updatedAt;setForm(formFrom(current));setDraftNotice('فُتحت نسخة الخادم.');}
+          }}>إعادة فتح نسخة الخادم</button></div>}
           <label className="block text-sm font-bold">عنوان المقالة *<input value={form.title} onChange={e=>change('title',e.target.value)} maxLength={220} placeholder="مثال: جماليات الاستعارة في شعر أبي تمام" className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream"/></label>
           <div className="grid sm:grid-cols-3 gap-4">
             <label className="text-sm font-bold">القسم الثقافي<select value={form.category} onChange={e=>change('category',e.target.value)} className="block mt-2 w-full border border-gold/40 rounded-xl p-3 bg-cream">{ARTICLE_CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</select></label>
