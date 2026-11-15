@@ -1,0 +1,139 @@
+name: Verify and release editorial Android edition
+on:
+  push:
+    branches: [feat/motazalqami-ultimate-experience]
+    paths: ['android/**', '.github/workflows/edition-release.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: editorial-release-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test and sign ARM64 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEYSTORE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          umask 077
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/release.jks"
+          mkdir -p dist
+          abi=(-PmotazArm64Only=true)
+          sdk="$ANDROID_HOME/build-tools/35.0.0"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          gh release download v2.0.0 -p '*.apk' -D "$RUNNER_TEMP/baseline"
+          original=$("$sdk/apksigner" verify --print-certs "$RUNNER_TEMP"/baseline/*.apk | awk '/certificate SHA-256 digest/ {print $NF;exit}')
+          test -n "$original"
+          pkg=com.moataz.motazalqmi
+          if [[ -n "$KEYSTORE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_PASSWORD" && -n "$ANDROID_KEY_ALIAS" ]]; then
+            printf '%s' "$KEYSTORE64" | base64 -d > "$ANDROID_KEYSTORE_PATH"
+            digest=$(keytool -exportcert -keystore "$ANDROID_KEYSTORE_PATH" -alias "$ANDROID_KEY_ALIAS" -storepass:env ANDROID_KEYSTORE_PASSWORD | sha256sum | cut -d' ' -f1)
+            test "$digest" = "$original"
+          else
+            abi+=(-PmotazIndependentEdition=true)
+            pkg="$pkg.edition3"
+            export ANDROID_KEYSTORE_PASSWORD="$(openssl rand -hex 32)"
+            export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+            export ANDROID_KEY_ALIAS=edition3
+            keytool -genkeypair -keystore "$ANDROID_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEY_PASSWORD -alias edition3 -keyalg RSA -keysize 3072 -validity 10000 -dname 'CN=Motaz Alalqami Independent Edition'
+            printf '%s' "$ANDROID_KEYSTORE_PASSWORD" > "$RUNNER_TEMP/password.txt"
+            cp "$RUNNER_TEMP/password.txt" "$RUNNER_TEMP/key-password.txt"
+            printf '%s' "$ANDROID_KEY_ALIAS" > "$RUNNER_TEMP/alias.txt"
+            tar -C "$RUNNER_TEMP" -cf - release.jks password.txt key-password.txt alias.txt | openssl cms -encrypt -aes-256-cbc -binary -outform DER -out dist/edition3-recovery.cms android/release/recovery-certificate.pem
+          fi
+          bash android/gradlew -p android :app:testDebugUnitTest :app:lintDebug :app:assembleRelease "${abi[@]}" --no-daemon
+          apk="dist/Motazalqmi-3.0.0-${pkg##*.}-ARM64.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$apk"
+          "$sdk/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$apk" > dist/signature.txt
+          "$sdk/zipalign" -c 4 "$apk"
+          "$sdk/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging"
+          grep -F "package: name='$pkg' versionCode='30000'" "$RUNNER_TEMP/badging"
+          grep -Fx "sdkVersion:'26'" "$RUNNER_TEMP/badging"
+          grep -Fx "native-code: 'arm64-v8a'" "$RUNNER_TEMP/badging"
+          unzip -tq "$apk"
+          printf '%s' "$pkg" > dist/package.txt
+          (cd dist && sha256sum *.apk > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with: {name: signed-edition, path: dist/, if-no-files-found: error}
+  older-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix: {api: [26, 28, 29]}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+      - run: sudo chmod a+rw /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          disable-animations: true
+          script: bash android/gradlew -p android connectedDebugAndroidTest
+  signed-device:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/download-artifact@v4
+        with: {name: signed-edition, path: dist}
+      - run: sudo chmod a+rw /dev/kvm
+      - name: Test the exact signed ARM64 file with ARM translation
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            (cd dist && sha256sum -c SHA256SUMS)
+            adb shell getprop ro.product.cpu.abilist | grep arm64-v8a
+            adb install dist/*.apk
+            adb shell svc wifi disable
+            adb shell svc data disable
+            adb shell am start -W -n "$(cat dist/package.txt)/com.moataz.motazalqmi.MainActivity" | tee /tmp/launch
+            grep -F 'Status: ok' /tmp/launch
+            sleep 5
+            adb shell pidof "$(cat dist/package.txt)"
+  publish:
+    needs: [older-android, signed-device]
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: signed-edition, path: dist}
+      - env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          set -eu
+          cd dist
+          sha256sum -c SHA256SUMS
+          if [ "$(cat package.txt)" = com.moataz.motazalqmi ]; then
+            tag=v3.0.0
+            note='تحديث رسمي موقّع بشهادة الإصدار 2.0.0.'
+            flags=()
+          else
+            tag=v3.0.0-independent.1
+            note='نسخة مستقلة باسم com.moataz.motazalqmi.edition3 تثبت بجانب النسخ السابقة. محفوظات كل نسخة خاصة بها.'
+            flags=(--prerelease)
+          fi
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
+          gh release create "$tag" * -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" --title 'مدونة معتز العلقمي 3.0 — المجلة الثقافية' --notes "$note Android 8+ ARM64. صفحة رئيسية تحريرية، متابعة القراءة، ومزامنة مشروطة تحافظ على المكتبة المحلية."
