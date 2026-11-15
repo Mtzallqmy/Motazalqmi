@@ -253,4 +253,145 @@ private fun share(context: android.content.Context, text: String) {
  LaunchedEffect(rendered, a.id) {
   if (rendered != null && !restored) {
    withFrameNanos { }; withFrameNanos { }
-   scroll.scrollTo(state?.offset
+   scroll.scrollTo(state?.offset ?: 0); restored = true
+  }
+ }
+ val ink = MaterialTheme.colorScheme.onBackground.toArgb()
+ val fontId = when (settings.font) { "amiri" -> R.font.amiri; "plex" -> R.font.plex; else -> R.font.naskh }
+ LaunchedEffect(a.id) {
+  snapshotFlow { scroll.value to scroll.maxValue }.debounce(500).collect { (offset, max) ->
+   if (restored && max > 0 && max < Int.MAX_VALUE) vm.position(a.id, 0, offset, offset.toFloat() / max)
+  }
+ }
+ Column(Modifier.fillMaxSize()) {
+  AnimatedVisibility(!focus) {
+   TopAppBar(title = { Text("رحاب القراءة", fontFamily = Amiri) }, navigationIcon = {
+    IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
+   }, actions = {
+    IconButton(onClick = { vm.save(a.id) }) { Icon(if (state?.saved == true) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "حفظ للقراءة لاحقًا") }
+    IconButton(onClick = { share(context, a.title + "\nhttps://motazalqmi.vercel.app/articles/" + Uri.encode(a.slug)) }) { Icon(Icons.Default.Share, "مشاركة المقال") }
+   })
+  }
+  LinearProgressIndicator(progress = { if (scroll.maxValue > 0 && scroll.maxValue < Int.MAX_VALUE) scroll.value.toFloat() / scroll.maxValue else 0f }, modifier = Modifier.fillMaxWidth())
+  Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+   TextButton(onClick = { focus = !focus }) { Text(if (focus) "إظهار الأدوات" else "قراءة مركزة") }
+   if (!focus) {
+    IconButton(onClick = { vm.configure(settings.copy(size = (settings.size - 1).coerceAtLeast(16f))) }) { Icon(Icons.Default.TextDecrease, "تصغير الخط") }
+    IconButton(onClick = { vm.configure(settings.copy(size = (settings.size + 1).coerceAtMost(34f))) }) { Icon(Icons.Default.TextIncrease, "تكبير الخط") }
+    IconButton(onClick = { vm.configure(settings.copy(theme = if (settings.theme == "dark") "light" else "dark")) }) { Icon(Icons.Default.DarkMode, "تبديل وضع القراءة الليلي") }
+   }
+  }
+  Column(Modifier.weight(1f).verticalScroll(scroll).padding(horizontal = 24.dp, vertical = 16.dp)) {
+   if (a.id !in library.available) Text("نسخة محفوظة؛ هذا المقال لم يعد منشورًا على الموقع.", color = MaterialTheme.colorScheme.secondary)
+   Text(library.sections.find { it.id == a.category }?.title ?: "", color = MaterialTheme.colorScheme.secondary)
+   Text(a.title, Modifier.padding(vertical = 18.dp), fontFamily = Amiri, fontSize = 32.sp, lineHeight = 48.sp)
+   val minutes = (a.content.split(Regex("\\s+")).size / 180).coerceAtLeast(1)
+   Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
+    if(a.authorImage.startsWith("https://")){
+     coil.compose.AsyncImage(model=readerImageUrl(a.authorImage),contentDescription="صورة الكاتب",
+      modifier=Modifier.size(52.dp).clip(CircleShape).border(2.dp,MaterialTheme.colorScheme.secondary,CircleShape),
+      contentScale=androidx.compose.ui.layout.ContentScale.Crop)
+    }else{
+     Surface(shape=CircleShape,color=MaterialTheme.colorScheme.secondaryContainer,modifier=Modifier.size(52.dp)){
+      Box(contentAlignment=Alignment.Center){Text(a.author.take(1).ifEmpty{"ك"},style=MaterialTheme.typography.titleLarge)}
+     }
+    }
+    Column {
+     Text("بقلم",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.secondary)
+     Text(a.author.ifBlank{"كاتب المقالة"},style=MaterialTheme.typography.titleMedium)
+     Text("${a.publishDate} · $minutes دقائق قراءة",style=MaterialTheme.typography.bodySmall)
+    }
+   }
+   Spacer(Modifier.height(20.dp)); Cover(a.coverImage, settings); Spacer(Modifier.height(22.dp))
+   if (rendered == null) CircularProgressIndicator()
+   // Render image blocks at the exact position they appear in the article.
+   // The original TextView-only Markwon renderer silently omitted Markdown image bytes.
+   splitMarkdownMedia(a.content).forEachIndexed { index, part ->
+    key(index) {
+     if(part.videoUrl!=null){
+      Text(part.label.ifBlank{"فيديو مرفق"},style=MaterialTheme.typography.titleSmall)
+      AndroidView(factory={ctx->
+       VideoView(ctx).apply{
+        setMediaController(MediaController(ctx))
+        setVideoURI(Uri.parse(part.videoUrl))
+        setOnErrorListener{_,_,_->true}
+       }
+      },modifier=Modifier.fillMaxWidth().height(220.dp))
+      Text("اضغط تشغيل للمشاهدة؛ يلزم اتصال الإنترنت.",style=MaterialTheme.typography.labelSmall)
+      Spacer(Modifier.height(16.dp))
+     }else if(part.audioUrl!=null||part.documentUrl!=null){
+      val link=part.audioUrl?:part.documentUrl.orEmpty()
+      OutlinedButton(onClick={runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(link)))};Unit}){
+       Icon(Icons.Default.OpenInNew,null)
+       Text(part.label.ifBlank{if(part.audioUrl!=null)"استماع إلى التسجيل" else "فتح الملف المرفق"})
+      }
+     }else if (part.imageUrl != null) {
+      Cover(part.imageUrl, settings)
+      Spacer(Modifier.height(14.dp))
+     } else if (!part.text.isNullOrBlank()) {
+      val partContent = part.text.orEmpty()
+      val parsed = remember(partContent) { engine.renderer.render(engine.renderer.parse(partContent)) }
+      AndroidView(factory = { TextView(it).apply {
+       textDirection = android.view.View.TEXT_DIRECTION_FIRST_STRONG_RTL
+       layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
+       setTextIsSelectable(true)
+       movementMethod = android.text.method.LinkMovementMethod.getInstance()
+      } }, modifier = Modifier.fillMaxWidth(), update = { view ->
+       view.setTextColor(ink); view.setLinkTextColor(MaterialColors.link)
+       view.typeface = ResourcesCompat.getFont(context, fontId) ?: Typeface.DEFAULT
+       view.textSize = settings.size
+       view.setLineSpacing(0f, settings.spacing)
+       if (view.tag !== parsed) { engine.renderer.setParsedMarkdown(view, parsed); view.tag = parsed }
+      })
+     }
+    }
+   }
+   Spacer(Modifier.height(30.dp))
+   val published = library.articles.filter { it.id in library.available }; val index = published.indexOfFirst { it.id == a.id }
+   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    published.getOrNull(index - 1)?.let { TextButton(onClick = { open(it.id) }) { Text("المقال السابق") } }
+    if (index >= 0) published.getOrNull(index + 1)?.let { TextButton(onClick = { open(it.id) }) { Text("المقال التالي") } }
+   }
+   HorizontalDivider(); Text("برمجة وتطوير: معتز العلقمي — تعز — اليمن — 2026م", Modifier.padding(vertical = 24.dp), style = MaterialTheme.typography.bodyMedium)
+  }
+ }
+}
+private object MaterialColors { val link = android.graphics.Color.rgb(104, 142, 113) }
+@Composable private fun SettingsPage(settings: ReadingSettings, syncedAt: Long, busy: Boolean, change: (ReadingSettings) -> Unit, sync: () -> Unit, clean: () -> Unit, about: () -> Unit, writer: () -> Unit) {
+ var confirm by remember { mutableStateOf(false) }
+ Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+  Title("على مهلٍ… كما تحب")
+  Text("المظهر")
+  Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("system" to "النظام", "light" to "نهاري", "dark" to "ليلي").forEach { (id, label) -> FilterChip(settings.theme == id, { change(settings.copy(theme = id)) }, { Text(label) }) } }
+  Text("حجم خط القراءة: ${settings.size.toInt()}")
+  Slider(value = settings.size, onValueChange = { change(settings.copy(size = it)) }, valueRange = 16f..34f)
+  Text("تباعد السطور")
+  Slider(value = settings.spacing, onValueChange = { change(settings.copy(spacing = it)) }, valueRange = 1.3f..2.4f)
+  Text("خط القراءة")
+  Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("naskh" to "نسخ", "amiri" to "أميري", "plex" to "بلكس").forEach { (id, label) -> FilterChip(settings.font == id, { change(settings.copy(font = id)) }, { Text(label) }) } }
+  Text("قِفا نبكِ من ذكرى حبيبٍ ومنزلِ", fontFamily = when (settings.font) { "amiri" -> Amiri; "plex" -> Plex; else -> Naskh }, fontSize = settings.size.sp, lineHeight = (settings.size * settings.spacing).sp)
+  HorizontalDivider()
+  Row(verticalAlignment = Alignment.CenterVertically) { Text("تحميل الصور عبر Wi-Fi فقط", Modifier.weight(1f)); Switch(settings.wifiImages, { change(settings.copy(wifiImages = it)) }) }
+  Text(if (syncedAt == 0L) "لم تتم مزامنة الشبكة بعد؛ المحتوى التأسيسي متاح." else "آخر مزامنة: " + DateFormat.getDateTimeInstance().format(Date(syncedAt)))
+  Button(sync, enabled = !busy) { Icon(Icons.Default.Sync, null); Text("مزامنة المحتوى الآن") }
+  Text("يتحقق التطبيق في الخلفية دوريًا عند توفر الاتصال والبطارية المناسبة. قد يؤخر النظام التنفيذ.", style = MaterialTheme.typography.bodyMedium)
+  OutlinedButton({ confirm = true }) { Text("تنظيف المحتوى غير المحفوظ والصور المؤقتة") }
+  TextButton(about) { Text("حول المدونة والتطبيق") }
+  OutlinedButton(onClick = writer) { Icon(Icons.Default.Edit, null); Text("لوحة الكاتب — إدارة المقالات") }
+  Text("الإصدار ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) • Android 8+")
+  Title("سياسة الخصوصية")
+  Text("تُحفظ المحفوظات وسجل القراءة والإعدادات على جهازك. لا يطلب التطبيق جهات الاتصال أو الموقع. تُرسل طلبات قراءة المحتوى إلى الموقع الرسمي عبر HTTPS، وقد تحتفظ الاستضافة بسجلات الاتصال المعتادة. تُحمّل أغلفة المقالات من روابطها الخارجية وفق إعداد Wi-Fi. لا يضم التطبيق أدوات إعلانات أو تحليلات. لوحة الكاتب تتطلب مصادقة مستقلة وآمنة.", lineHeight = 28.sp)
+ }
+ if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("تنظيف التخزين المحلي؟") }, text = { Text("ستبقى المقالات المحفوظة والإعدادات وسجل القراءة. يمكن جلب بقية المقالات بالمزامنة مجددًا.") }, confirmButton = { TextButton({ clean(); confirm = false }) { Text("تنظيف") } }, dismissButton = { TextButton({ confirm = false }) { Text("إلغاء") } })
+}
+@Composable private fun About(about: String) {
+ Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+  Icon(Icons.Default.AutoStories, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.secondary)
+  Title("مدونة معتز العلقمي")
+  Text(about.replace("\\n", "\n"), fontFamily = Naskh, fontSize = 23.sp, lineHeight = 42.sp)
+  HorizontalDivider()
+  Text("برمجة وتطوير: معتز العلقمي — تعز — اليمن — 2026م", fontFamily = Amiri, fontSize = 23.sp)
+  Text("Motaz Alalqami • ${BuildConfig.VERSION_NAME}")
+  Text("الخطوط: Amiri، Noto Naskh Arabic، IBM Plex Sans Arabic — مرخصة وفق SIL Open Font License 1.1. ملفات الترخيص مرفقة مع الشفرة.")
+ }
+}
