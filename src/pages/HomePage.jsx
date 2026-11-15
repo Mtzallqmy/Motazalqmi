@@ -1,32 +1,56 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Award, BookOpen, ChevronLeft, Feather, Quote, RefreshCw, Sparkles } from 'lucide-react';
-import { CATEGORIES, ARTICLE_CATEGORIES } from '../data/categories';
-
+import { ArrowLeft, BookOpen, RotateCcw } from 'lucide-react';
+import { ARTICLE_CATEGORIES, getCategory } from '../data/categories';
 import { useArticles } from '../hooks/useArticles';
 import { ArticleCard } from '../components/ArticleCard';
-import { Ornament, EmptyState } from '../components/Ornaments';
+import { EmptyState } from '../components/Ornaments';
+import { articlePath, formatDate } from '../lib/format';
+import { normalizeArabic } from '../../shared/arabicSearch';
+
 export function HomePage(interactions) {
-  const { published, quotes: DAILY_QUOTES, loading, isDemo, error, site } = useArticles();
+  const { published, quotes, loading, error, site } = useArticles();
   const [params] = useSearchParams();
-  const query = (params.get('q') || '').trim().toLowerCase();
-  const [category, setCategory] = useState('all');
+  const term = params.get('q')?.trim() || '';
+  const [category, setCategory] = useState('');
+  const [order, setOrder] = useState('recent');
   const [quoteIndex, setQuoteIndex] = useState(0);
-  const filtered = useMemo(() => published.filter(a => {
-    const matchCategory = category === 'all' || a.category === category;
-    const matchQuery = !query || [a.title, a.excerpt, a.content, ...(a.tags || [])].some(v => String(v || '').toLowerCase().includes(query));
-    return matchCategory && matchQuery;
-  }), [published, category, query]);
-  const featured = published.filter(a => a.featured).slice(0, 3);
-  return <div>
-    <section className="relative max-w-7xl mx-auto mt-6 mx-4 sm:mx-6 xl:mx-auto rounded-3xl bg-gradient-to-br from-[#093A3E] via-teal to-ink border border-gold/40 text-cream shadow-2xl overflow-hidden">
-      <div className="absolute inset-0 ornament opacity-60"/><span aria-hidden="true" className="float absolute top-8 left-[12%] font-calligraphy text-8xl text-gold/15">ض</span><span aria-hidden="true" className="float absolute bottom-8 left-[33%] font-calligraphy text-7xl text-white/10">ق</span>
-      <div className="relative p-8 sm:p-12 lg:p-20 grid lg:grid-cols-12 gap-12 items-center"><div className="lg:col-span-7"><p className="inline-flex items-center gap-2 rounded-full bg-gold/20 text-[#F3DFA2] border border-gold/40 px-4 py-2 text-xs"><Sparkles size={16}/> مدونة ثقافية وأدبية وفكرية</p><h1 className="font-calligraphy text-5xl sm:text-7xl font-bold text-[#F7E7CE] mt-6 mb-4">معتز العلقمي</h1><p className="font-literature text-2xl sm:text-3xl text-[#E8D3A7] mb-5">{'«'+(site?.tagline||'حيث تلتقي الكلمة بالفكر، ويزهر الأدب')+'»'}</p><p className="text-lg leading-loose text-cream/80 max-w-2xl">فضاء معرفي وجمالي يحتفي بعبقرية اللغة العربية، ويطوف في رياض الشعر، وعيون التراث، وبطون الكتب، وتأملات الفكر الإنساني الأصيل.</p><div className="mt-7 flex flex-wrap gap-3"><a href="#latest" className="inline-flex gap-2 items-center rounded-xl bg-gold px-6 py-3.5 text-ink font-bold"><BookOpen size={19}/> تصفح أحدث الكتابات</a><Link to="/about" className="inline-flex gap-2 items-center rounded-xl bg-white/10 border border-gold/40 px-6 py-3.5 font-bold">رسالة المدونة <ChevronLeft size={18}/></Link></div></div><div className="lg:col-span-5"><div className="bg-cream text-ink rounded-3xl p-7 shadow-2xl border-4 border-gold/60 rotate-1 hover:rotate-0 transition-transform"><p className="flex gap-2 items-center text-teal text-sm font-bold border-b border-gold/30 pb-3"><Feather size={16}/> إضاءة أدبية مختارة</p><p className="font-literature text-2xl leading-loose text-center my-7">«إنَّ البيانَ لَيُحيي مَيِّتَ الفِكَرِ ... كالغيثِ يَبعثُ روحَ الزَّهرِ في الشَّجَرِ»</p><div className="border-t border-gold/30 pt-3 text-xs text-rust flex justify-between"><span>إضاءة أدبية</span><span>أدبنا العربي</span></div></div></div></div>
+  const quote = quotes.length ? quotes[quoteIndex % quotes.length] : null;
+  const lead = published.find(a => a.featured) || published[0];
+  const articles = useMemo(() => {
+    const query = normalizeArabic(term);
+    return published.filter(a => (!category || a.category === category) &&
+      normalizeArabic([a.title, a.author, a.content, a.excerpt, getCategory(a.category).title, ...(a.tags || [])].join(' ')).includes(query))
+      .sort((a, b) => order === 'title' ? a.title.localeCompare(b.title, 'ar') :
+        order === 'oldest' ? a.publishDate.localeCompare(b.publishDate) : b.publishDate.localeCompare(a.publishDate));
+  }, [published, category, term, order]);
+  return <div className="edition">
+    {!term && <>
+      <header className="masthead"><span>{site?.tagline}</span><h1>مدونة معتز العلقمي</h1></header>
+      {lead && <section className="lead-story">
+        <div className="lead-text"><Link className="section-name" to={'/category/' + lead.category}>{getCategory(lead.category).title}</Link>
+          <h2><Link to={articlePath(lead)}>{lead.title}</Link></h2>
+          <p>{lead.excerpt}</p><div className="byline">{[lead.author, formatDate(lead.publishDate)].filter(Boolean).join('  /  ')}</div>
+          <Link className="read-link" to={articlePath(lead)}>قراءة المقالة <ArrowLeft size={18}/></Link>
+        </div>{lead.coverImage && <Link className="lead-image" to={articlePath(lead)} aria-label={lead.title}>
+          <img alt="" fetchPriority="high" src={lead.coverImage}/></Link>}
+      </section>}
+    </>}
+    <section id="latest" className="catalog">
+      <div className="catalog-heading"><h2>{term ? 'نتائج البحث عن «' + term + '»' : 'أحدث الكتابات'}</h2>
+        <label>ترتيب <select value={order} onChange={e => setOrder(e.target.value)}>
+          <option value="recent">الأحدث أولًا</option><option value="oldest">الأقدم أولًا</option><option value="title">حسب العنوان</option>
+        </select></label></div>
+      <div className="filters" role="group" aria-label="تصفية حسب القسم">
+        {[{id:'', title:'الكل'}, ...ARTICLE_CATEGORIES].map(c => <button key={c.id} aria-pressed={c.id === category} onClick={() => setCategory(c.id)}>{c.title}</button>)}
+      </div>
+      {error && <p role="alert">{error}</p>}
+      {loading ? <p role="status">جار تحميل الكتابات…</p> : articles.length ?
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-7">{articles.map(a => <ArticleCard key={a.id} article={a} {...interactions}/>)}</div> :
+        <EmptyState title="لا توجد مقالات مطابقة" description="جرّب اسم الكاتب أو كلمة من النص"/>}
     </section>
-    <section className="max-w-5xl mx-auto px-4 sm:px-6 mt-12"><div className="rounded-3xl bg-[#F4ECE1] border border-gold/40 p-7 sm:p-10 shadow-soft"><div className="flex flex-wrap gap-4 justify-between items-center"><h2 className="font-literature text-2xl font-bold text-teal flex items-center gap-3"><Quote size={22} className="text-gold"/> اقتباس اليوم</h2><button onClick={() => setQuoteIndex(v => (v + 1) % Math.max(1, DAILY_QUOTES.length))} className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-xs font-bold text-teal border border-gold/30"><RefreshCw size={15}/> اقتباس آخر</button></div><blockquote className="text-center my-5"><p className="font-literature text-2xl sm:text-3xl leading-loose">«{(DAILY_QUOTES[quoteIndex] || {}).text}»</p><footer className="text-rust font-bold mt-3">— {(DAILY_QUOTES[quoteIndex] || {}).author} <span className="font-normal text-ink/60">({(DAILY_QUOTES[quoteIndex] || {}).source})</span></footer></blockquote></div></section>
-    <Ornament/>
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 py-5"><div className="text-center mb-10"><span className="rounded-full px-4 py-1.5 text-xs font-bold text-rust bg-rust/10">أبواب المعرفة والجمال</span><h2 className="font-literature text-4xl font-bold mt-4">أقسام مدونة «معتز العلقمي»</h2><p className="mt-2 text-ink/60">ثمانية روافد ثقافية وأدبية لتجربة قراءة عربية ثرية</p></div><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">{CATEGORIES.map(c => { const Icon = c.icon; return <Link key={c.id} to={c.id === 'about' ? '/about' : `/category/${c.id}`} className="group rounded-2xl bg-white border border-gold/30 p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all"><span className={`flex items-center justify-center w-12 h-12 rounded-2xl text-white bg-gradient-to-br ${c.color} group-hover:rotate-6 transition-transform`}><Icon size={24}/></span><h3 className="font-literature text-2xl font-bold mt-5 group-hover:text-teal">{c.title}</h3><p className="text-sm text-ink/60 mt-2 min-h-12">{c.subtitle}</p><div className="mt-5 pt-3 border-t border-gold/20 flex justify-between items-center gap-2 text-xs text-teal font-bold"><span>{c.id === 'about' ? 'السيرة والرسالة' : `${published.filter(a => a.category === c.id).length} مقالة منشورة`}</span><span className="inline-flex items-center gap-1 text-rust">استكشف <ChevronLeft size={14}/></span></div></Link>; })}</div></section>
-    {!query && featured.length > 0 && <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14"><p className="flex items-center gap-2 text-teal text-sm font-bold"><Award className="text-gold" size={19}/> مختارات المحرر</p><h2 className="font-literature text-4xl font-bold mb-8">المقالات المميزة</h2><div className="grid lg:grid-cols-3 gap-6">{featured.map((a,i) => <ArticleCard key={a.id} article={a} large={i===0} {...interactions}/>)}</div></section>}
-    <section id="latest" className="max-w-7xl mx-auto px-4 sm:px-6 py-12"><h2 className="font-literature text-4xl font-bold">{query ? `نتائج البحث عن «${params.get('q')}»` : 'أحدث المنشورات الأدبية'}</h2><p className="text-ink/60 mt-1 mb-6">إصدارات متجددة في اللغة والأدب والتاريخ والفكر</p><div className="flex gap-2 overflow-x-auto pb-4 mb-5"><button onClick={() => setCategory('all')} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold ${category === 'all' ? 'bg-teal text-white' : 'bg-white border border-gold/30'}`}>الكل ({published.length})</button>{ARTICLE_CATEGORIES.map(c => <button key={c.id} onClick={() => setCategory(c.id)} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold ${category === c.id ? 'bg-teal text-white' : 'bg-white border border-gold/30'}`}>{c.title}</button>)}</div>{isDemo && <p className="text-xs text-rust mb-4">{error || 'المحتوى المعروض أمثلة تعريفية؛ يمكن للكاتب استيرادها بعد تهيئة Neon.'}</p>}{loading ? <p className="text-center p-10">جار تحميل المقالات…</p> : filtered.length ? <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-7">{filtered.map(article => <ArticleCard key={article.id} article={article} {...interactions}/>)}</div> : <EmptyState title="لا توجد مقالات مطابقة" description="جرّب عبارة بحث أخرى أو اختر قسمًا مختلفًا"/>}</section>
+    {!term && quote && <aside className="quote-panel"><BookOpen aria-hidden="true"/><blockquote>«{quote.text}»</blockquote>
+      <p>{[quote.author, quote.source].filter(Boolean).join(' · ')}</p>
+      {quotes.length > 1 && <button onClick={() => setQuoteIndex(i => i + 1)}><RotateCcw size={16}/> اقتباس آخر</button>}</aside>}
   </div>;
 }
