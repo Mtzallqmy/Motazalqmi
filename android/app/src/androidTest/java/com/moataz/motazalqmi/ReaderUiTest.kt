@@ -43,10 +43,13 @@ class ReaderUiTest {
   val seedId = "seed-1"
   val featuredTag = "featured-article-$seedId"
   val savedCardTag = "article-card-$seedId"
+  // The featured card now follows the masthead and horizontal section carousel,
+  // so it is not necessarily composed until the LazyColumn is scrolled.
   rule.waitUntil(20000) {
-   rule.onAllNodesWithTag(featuredTag).fetchSemanticsNodes().isNotEmpty()
+   rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty()
   }
   rule.onNodeWithTag("home-feed").performScrollToNode(hasTestTag(featuredTag))
+  rule.onNodeWithTag(featuredTag).assertIsDisplayed()
   rule.onNodeWithTag(featuredTag).assertIsDisplayed().performClick()
   rule.waitUntil(10000) {
    rule.onAllNodesWithContentDescription("حفظ للقراءة لاحقًا").fetchSemanticsNodes().isNotEmpty()
