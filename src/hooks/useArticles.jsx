@@ -1,3 +1,4 @@
+import {isScheduled} from '../../shared/publication';
 import {createContext,useContext,useEffect,useMemo,useState,useCallback} from 'react';
 import {INITIAL_ARTICLES} from '../data/articles';
 import {useAuth} from '../context/AuthContext';
@@ -35,7 +36,7 @@ export function ArticlesProvider({children}){
   await api('/api/articles',{method:'POST',body:JSON.stringify({action:'editorial',editorial:{tagline,about,quotes:editedQuotes}})});
   await load(true);
  };
- const published=useMemo(()=>articles.filter(a=>a.status==='published'),[articles]);
+ const published=useMemo(()=>articles.filter(a=>a.status==='published'&&!isScheduled(a)),[articles]);
  return <Context.Provider value={{articles,published,quotes,site,loading,error,isDemo,save,remove,importExamples,saveEditorial}}>{children}</Context.Provider>;
 }
 export const useArticles=()=>useContext(Context);
