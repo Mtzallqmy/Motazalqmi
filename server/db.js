@@ -1,3 +1,4 @@
+import {publicationTime} from '../shared/publication.js';
 import { neon } from '@neondatabase/serverless';
 export function database(){
  const url=process.env.DATABASE_URL;
@@ -14,10 +15,11 @@ export function normalizeArticle(a){
  if(!status)throw new Error('حالة المقالة غير صالحة.');
  const publishDate=str('publishDate',10,new Date().toISOString().slice(0,10));
  if(!/^\d{4}-\d{2}-\d{2}$/.test(publishDate)||Number.isNaN(Date.parse(publishDate)))throw new Error('تاريخ المقالة غير صالح.');
+ const scheduledAt=status==='draft'?'':Object.hasOwn(a,'scheduledAt')?publicationTime(a.scheduledAt):undefined;
  const coverImage=str('coverImage',2048),authorImage=str('authorImage',2048);
  if(coverImage&&!/^https:\/\//i.test(coverImage))throw new Error('رابط صورة الغلاف يجب أن يكون HTTPS.');
  if(authorImage&&!/^https:\/\//i.test(authorImage))throw new Error('صورة الكاتب يجب أن تكون HTTPS.');
- return {id,slug,title,content,status,publishDate,coverImage,category:str('category',60,'general'),
+ return {id,slug,title,content,status,...(scheduledAt!==undefined?{scheduledAt}:{}),publishDate,coverImage,category:str('category',60,'general'),
  authorId:str('authorId',36),excerpt:str('excerpt',1000),author:str('author',150,'معتز العلقمي'),authorImage,readTime:str('readTime',100,'5 دقائق'),
  fontFamily:['amiri','naskh','tajawal'].includes(a.fontFamily)?a.fontFamily:'amiri',
  fontSize:Number.isInteger(a.fontSize)&&a.fontSize>=16&&a.fontSize<=32?a.fontSize:22,

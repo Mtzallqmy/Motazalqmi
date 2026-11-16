@@ -7,7 +7,7 @@ import { SITE, SECTIONS, QUOTES } from '../shared/publicContent.js';
 export async function publishedSnapshot() {
  const sql = database();
  const [result] = await sql`WITH published AS (
-   SELECT id,slug,status,publish_date::text,data,updated_at FROM blog_articles
+   SELECT id,slug,status,publish_date::text,data,updated_at FROM blog_published_articles
    WHERE status='published' ORDER BY publish_date DESC,id LIMIT 2001
   ) SELECT COALESCE(jsonb_agg(to_jsonb(published) ORDER BY publish_date DESC,id),'[]'::jsonb) AS articles,
   (SELECT data FROM blog_public_metadata WHERE id='editorial') AS metadata FROM published`;

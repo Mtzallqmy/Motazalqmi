@@ -29,7 +29,7 @@ export async function discovery(req,res,resource) {
   try {
     const sql = database();
     if (resource === 'sitemap') {
-      const rows = await sql`SELECT slug,updated_at::text FROM blog_articles WHERE status='published' ORDER BY id`;
+      const rows = await sql`SELECT slug,updated_at::text FROM blog_published_articles WHERE status='published' ORDER BY id`;
       res.setHeader('Content-Type','application/xml; charset=utf-8');
       res.setHeader('Cache-Control','public,max-age=0,s-maxage=60');
       const urls = ['<url><loc>'+origin+'/</loc></url>', ...rows.map(r => '<url><loc>'+escape(articleUrl(r.slug))+'</loc><lastmod>'+new Date(r.updated_at).toISOString()+'</lastmod></url>')];
@@ -38,7 +38,7 @@ export async function discovery(req,res,resource) {
     const slug = req.query?.slug;
     if (typeof slug !== 'string' || !slug.length || slug.length > 150) return res.status(404).end();
     const [row] = await sql`SELECT a.id,a.slug,a.status,a.publish_date::text,a.updated_at::text,a.data
-      FROM blog_articles a WHERE a.status='published' AND (a.slug=${slug} OR a.id=${slug} OR a.id=(
+      FROM blog_published_articles a WHERE a.status='published' AND (a.slug=${slug} OR a.id=${slug} OR a.id=(
       SELECT article_id FROM blog_article_slugs WHERE slug=${slug})) ORDER BY (a.slug=${slug}) DESC LIMIT 1`;
     if (!row) {res.setHeader('Cache-Control','no-store');return res.status(404).send('المقالة غير متاحة');}
     if (row.slug !== slug) {res.setHeader('Location',articleUrl(row.slug));return res.status(308).end();}

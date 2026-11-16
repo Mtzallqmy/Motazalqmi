@@ -29,7 +29,7 @@ export async function studio(req, res, resource) {
       const cursor = req.query.cursor;
       if (cursor && (typeof cursor !== 'string' || cursor.length > 2048)) return res.status(400).end();
       const page = await list({limit:40, cursor});
-      return res.status(200).json({items:page.blobs.map(({url,pathname,size,uploadedAt}) => ({url,pathname,size,uploadedAt})),cursor:page.cursor || null});
+      return res.status(200).json({items:page.blobs.map(({url,pathname,size,uploadedAt}) => ({url,pathname,size,uploadedAt})),cursor:page.cursor || null,pendingDeletions:await sql`SELECT url,requested_at AS "requestedAt" FROM blog_deleted_media WHERE state='pending' ORDER BY requested_at LIMIT 20`});
     }
     if (resource !== 'authors') return res.status(405).end();
     if (!write) {
@@ -43,6 +43,7 @@ export async function studio(req, res, resource) {
       ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()`;
     return res.status(200).json({author});
   } catch (e) {
+    if(e.code==='23514')return res.status(409).json({error:'هذه الصورة محجوزة للحذف. ارفع صورة أخرى.'});
     if (e.message==='INPUT'||e.code==='ERR_INVALID_URL') return res.status(400).json({error:'تحقق من بيانات الكاتب وروابط HTTPS.'});
     return res.status(503).json({error:'تعذر تحميل بيانات الاستوديو.'});
   }
