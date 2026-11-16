@@ -27,6 +27,7 @@ export function HomePage(interactions) {
   return <div className="edition">
     {!term && <>
       <header className="masthead"><span>{site?.tagline}</span><h1>مدونة معتز العلقمي</h1></header>
+      <nav className="edition-doors" aria-label="أبواب المجلة">{ARTICLE_CATEGORIES.map(c=><Link key={c.id} to={'/category/'+c.id}>{c.title}</Link>)}</nav>
       {lead && <section className="lead-story">
         <div className="lead-text"><Link className="section-name" to={'/category/' + lead.category}>{getCategory(lead.category).title}</Link>
           <h2><Link to={articlePath(lead)}>{lead.title}</Link></h2>
@@ -49,6 +50,14 @@ export function HomePage(interactions) {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-7">{articles.map(a => <ArticleCard key={a.id} article={a} {...interactions}/>)}</div> :
         <EmptyState title="لا توجد مقالات مطابقة" description="جرّب اسم الكاتب أو كلمة من النص"/>}
     </section>
+    {!term && !category && <section className="reading-shelves">
+      {['books','arabic_lit'].map(id=>{
+        const chosen=published.filter(a=>a.category===id).slice(0,3);
+        return chosen.length>0&&<div className="reading-shelf" key={id}><h2>{getCategory(id).title}</h2>
+          {chosen.map(a=><Link key={a.id} to={articlePath(a)}><span>{a.author}</span><h3>{a.title}</h3><ArrowLeft size={18}/></Link>)}
+          <Link className="shelf-more" to={'/category/'+id}>جميع الكتابات</Link></div>;
+      })}
+    </section>}
     {!term && quote && <aside className="quote-panel"><BookOpen aria-hidden="true"/><blockquote>«{quote.text}»</blockquote>
       <p>{[quote.author, quote.source].filter(Boolean).join(' · ')}</p>
       {quotes.length > 1 && <button onClick={() => setQuoteIndex(i => i + 1)}><RotateCcw size={16}/> اقتباس آخر</button>}</aside>}

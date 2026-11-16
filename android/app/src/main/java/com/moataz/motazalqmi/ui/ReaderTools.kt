@@ -91,3 +91,20 @@ private fun audioTime(ms: Int): String = "%d:%02d".format(ms / 60000, ms / 1000 
   }
  }
 }
+
+@Composable internal fun ReaderVideo(url: String) {
+ val owner = LocalLifecycleOwner.current
+ val context = androidx.compose.ui.platform.LocalContext.current
+ val view = remember(url) {
+  android.widget.VideoView(context).apply {
+   setMediaController(android.widget.MediaController(context))
+   setVideoURI(android.net.Uri.parse(url))
+  }
+ }
+ DisposableEffect(view, owner) {
+  val observer = LifecycleEventObserver { _, event -> if(event==Lifecycle.Event.ON_STOP)view.pause() }
+  owner.lifecycle.addObserver(observer)
+  onDispose { owner.lifecycle.removeObserver(observer); view.stopPlayback() }
+ }
+ androidx.compose.ui.viewinterop.AndroidView(factory={view},modifier=Modifier.fillMaxWidth().height(220.dp))
+}

@@ -261,21 +261,8 @@ private fun share(context: android.content.Context, text: String) {
    Text(library.sections.find { it.id == a.category }?.title ?: "", color = MaterialTheme.colorScheme.secondary)
    Text(a.title, Modifier.padding(vertical = 18.dp), fontFamily = Amiri, fontSize = 32.sp, lineHeight = 48.sp)
    val minutes = (a.content.split(Regex("\\s+")).size / 180).coerceAtLeast(1)
-   Row(Modifier.clickable(enabled = a.author.isNotBlank()) { showAuthor = true },verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
-    if(a.authorImage.startsWith("https://")){
-     coil.compose.AsyncImage(model=readerImageUrl(a.authorImage),contentDescription="صورة الكاتب",
-      modifier=Modifier.size(52.dp).clip(CircleShape).border(2.dp,MaterialTheme.colorScheme.secondary,CircleShape),
-      contentScale=androidx.compose.ui.layout.ContentScale.Crop)
-    }else{
-     Surface(shape=CircleShape,color=MaterialTheme.colorScheme.secondaryContainer,modifier=Modifier.size(52.dp)){
-      Box(contentAlignment=Alignment.Center){Text(a.author.take(1).ifEmpty{"ك"},style=MaterialTheme.typography.titleLarge)}
-     }
-    }
-    Column {
-     Text("بقلم",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.secondary)
-     Text(a.author.ifBlank{"كاتب المقالة"},style=MaterialTheme.typography.titleMedium)
-     Text("${a.publishDate} · $minutes دقائق قراءة",style=MaterialTheme.typography.bodySmall)
-    }
+   Box(Modifier.clickable(enabled=a.author.isNotBlank()){showAuthor=true}.padding(vertical=6.dp)) {
+    AuthorIdentity(a.author,a.authorImage,"${a.publishDate} · $minutes دقائق قراءة")
    }
    Spacer(Modifier.height(20.dp)); Cover(a.coverImage, settings); Spacer(Modifier.height(22.dp))
    if (rendered == null) CircularProgressIndicator()
@@ -286,13 +273,7 @@ private fun share(context: android.content.Context, text: String) {
      Column(Modifier.fillMaxWidth().onGloballyPositioned { offsets[index] = it.positionInParent().y.toInt() }) {
      if(part.videoUrl!=null){
       Text(part.label.ifBlank{"فيديو مرفق"},style=MaterialTheme.typography.titleSmall)
-      AndroidView(factory={ctx->
-       VideoView(ctx).apply{
-        setMediaController(MediaController(ctx))
-        setVideoURI(Uri.parse(part.videoUrl))
-        setOnErrorListener{_,_,_->true}
-       }
-      },modifier=Modifier.fillMaxWidth().height(220.dp))
+      ReaderVideo(part.videoUrl)
       Text("اضغط تشغيل للمشاهدة؛ يلزم اتصال الإنترنت.",style=MaterialTheme.typography.labelSmall)
       Spacer(Modifier.height(16.dp))
      }else if(part.audioUrl!=null){

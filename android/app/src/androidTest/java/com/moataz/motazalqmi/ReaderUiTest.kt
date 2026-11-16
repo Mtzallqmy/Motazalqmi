@@ -64,4 +64,18 @@ class ReaderUiTest {
   rule.onNodeWithTag("saved-feed").performScrollToNode(hasTestTag(savedCardTag))
   rule.onNodeWithTag(savedCardTag).assertIsDisplayed()
  }
+ @Test fun readerOffersNativeIndexAndAppearanceSheet() {
+  rule.waitUntil(20000) { rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty() }
+  rule.onNodeWithTag("home-feed").performScrollToNode(hasTestTag("featured-article-seed-1"))
+  rule.onNodeWithTag("featured-article-seed-1").performClick()
+  rule.onNodeWithContentDescription("إعدادات القراءة").performClick()
+  rule.onNodeWithText("مساحتك للقراءة").assertIsDisplayed()
+  rule.onNodeWithText("نهاري").performClick()
+  rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+  rule.onNodeWithContentDescription("فهرس المقالة").performClick()
+  rule.onNodeWithText("فهرس المقالة").assertIsDisplayed()
+  rule.onNodeWithText("إغلاق").performClick()
+  capture("reader-tools")
+ }
+
 }

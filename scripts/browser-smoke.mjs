@@ -23,6 +23,10 @@ try {
  assert.equal(await page.locator('.article-prose').evaluate(el=>getComputedStyle(el).fontSize),'28px');
  await page.locator('.reader-controls summary').click();await page.getByLabel('المظهر').selectOption('night');
  assert(await page.locator('.reader-surface.night').count());
+ await page.getByLabel('حفظ المقالة').click();
+ await page.getByRole('link',{name:'المكتبة المحفوظة'}).click();
+ await page.getByRole('heading',{name:'مكتبتك',exact:true}).waitFor();
+ assert.equal(await page.locator('.personal-library article').count(),1);
  await page.setViewportSize({width:1440,height:900});await page.goto('http://localhost:4173');await page.locator('.lead-text').waitFor();
  await page.screenshot({path:'desktop-home.png',animations:'disabled'});
  admin=true;await page.goto('http://localhost:4173/admin?edit='+seed.articles[0].id);
