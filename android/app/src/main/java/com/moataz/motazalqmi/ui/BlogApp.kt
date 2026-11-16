@@ -48,6 +48,9 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.FlowPreview
 import java.text.DateFormat
 import java.util.Date
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import kotlinx.coroutines.launch
 
 private val tabs = listOf("home" to "الرئيسية", "search" to "البحث", "saved" to "مكتبتي", "settings" to "الإعدادات")
 @Composable fun BlogApp(vm: BlogViewModel, deepSlug: String?) {
@@ -135,17 +138,30 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
 }
 @Composable private fun Search(library: Library, settings: ReadingSettings, open: (String) -> Unit) {
  var query by rememberSaveable { mutableStateOf("") }
+ var category by rememberSaveable { mutableStateOf("") }
+ var oldest by rememberSaveable { mutableStateOf(false) }
  var results by remember { mutableStateOf(emptyList<ArticleDto>()) }
- LaunchedEffect(query, library) {
-  kotlinx.coroutines.delay(200)
+ LaunchedEffect(query, category, oldest, library) {
+  kotlinx.coroutines.delay(180)
   results = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-   library.articles.filter { a -> a.id in library.available && ArabicSearch.matches(query, a.title, a.content, a.author, a.tags.joinToString(" "), library.sections.find { it.id == a.category }?.title ?: "") }
+   val found = library.articles.filter { a -> a.id in library.available && (category.isEmpty() || a.category == category) &&
+    ArabicSearch.matches(query, a.title, a.content, a.author, a.tags.joinToString(" "), library.sections.find { it.id == a.category }?.title.orEmpty()) }
+   if(oldest)found.sortedBy { it.publishDate } else found.sortedByDescending { it.publishDate }
   }
  }
- Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-  Title("ابحث بين السطور")
-  OutlinedTextField(value = query, onValueChange = { query = it.take(120) }, label = { Text("عنوان، مؤلف، كلمة أو قسم") }, leadingIcon = { Icon(Icons.Default.Search, null) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-  ArticleList(results, settings, "${results.size} من النتائج", open)
+ Column(Modifier.fillMaxSize()) {
+  Text("اكتشف نصّك القادم",Modifier.padding(horizontal=20.dp,vertical=16.dp),style=MaterialTheme.typography.headlineMedium)
+  OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal=20.dp),
+   label = { Text("كلمة، عنوان، أو اسم كاتب") }, singleLine = true,
+   trailingIcon = { if(query.isNotEmpty())IconButton(onClick={query=""}){Icon(Icons.Default.Close,"مسح البحث")} })
+  LazyRow(contentPadding=PaddingValues(horizontal=20.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+   item { FilterChip(category.isEmpty(),{category=""},{Text("كل الأبواب")}) }
+   items(library.sections.filter { it.id!="about" },key={it.id}) { item ->
+    FilterChip(category==item.id,{category=item.id},{Text(item.title)})
+   }
+  }
+  TextButton(onClick={oldest=!oldest},modifier=Modifier.padding(horizontal=12.dp)) { Text(if(oldest)"الأقدم أولًا ↓" else "الأحدث أولًا ↓") }
+  Box(Modifier.weight(1f)) { ArticleList(results, settings, "${results.size} من النتائج", open) }
  }
 }
 @Composable private fun Quotes(library: Library, settings: ReadingSettings, save: (String) -> Unit, open: (String) -> Unit) {
@@ -172,7 +188,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
 }
 @Composable private fun Saved(library: Library, settings: ReadingSettings, save: (String) -> Unit, open: (String) -> Unit) {
  var filter by rememberSaveable { mutableStateOf(0) }
- val articles = library.articles.filter { a -> val s = library.states[a.id]; when (filter) { 0 -> s?.saved == true; 1 -> (s?.openedAt ?: 0) > 0; else -> (s?.openedAt ?: 0) > 0 && (s?.progress ?: 0f) < .98f } }
+ val articles = library.articles.filter { a -> val s = library.states[a.id]; when (filter) { 0 -> s?.saved == true; 1 -> (s?.openedAt ?: 0) > 0; else -> (s?.openedAt ?: 0) > 0 && (s?.progress ?: 0f) < .98f } }.sortedByDescending { library.states[it.id]?.openedAt ?: 0L }
  Column(Modifier.fillMaxSize()) {
   Row(Modifier.horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
    listOf("المحفوظات", "سجل القراءة", "أكمل القراءة").forEachIndexed { i, label -> FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(label) }) }
@@ -196,6 +212,13 @@ private fun share(context: android.content.Context, text: String) {
  var focus by rememberSaveable(a.id) { mutableStateOf(false) }
  var restored by remember(a.id) { mutableStateOf(false) }
  val engine = remember { MarkdownEngine(context) }
+ val parts = remember(a.content) { readerParts(a.content) }
+ val headings = remember(parts) { parts.mapIndexedNotNull { index, part -> partHeading(part)?.let { index to it } } }
+ val offsets = remember(a.id, a.content) { mutableMapOf<Int, Int>() }
+ val scope = rememberCoroutineScope()
+ var showIndex by rememberSaveable(a.id) { mutableStateOf(false) }
+ var showSettings by rememberSaveable(a.id) { mutableStateOf(false) }
+ var showAuthor by rememberSaveable(a.id) { mutableStateOf(false) }
  var rendered by remember(a.content) { mutableStateOf<android.text.Spanned?>(null) }
  LaunchedEffect(a.content) {
   rendered = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { engine.renderer.render(engine.renderer.parse(a.content)) }
@@ -218,6 +241,8 @@ private fun share(context: android.content.Context, text: String) {
    TopAppBar(title = { Text("رحاب القراءة", fontFamily = Amiri) }, navigationIcon = {
     IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
    }, actions = {
+    if (headings.isNotEmpty()) IconButton(onClick = { showIndex = true }) { Icon(Icons.Default.Toc, "فهرس المقالة") }
+    IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Tune, "إعدادات القراءة") }
     IconButton(onClick = { vm.save(a.id) }) { Icon(if (state?.saved == true) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "حفظ للقراءة لاحقًا") }
     IconButton(onClick = { share(context, a.title + "\nhttps://motazalqmi.vercel.app/articles/" + Uri.encode(a.slug)) }) { Icon(Icons.Default.Share, "مشاركة المقال") }
    })
@@ -236,47 +261,34 @@ private fun share(context: android.content.Context, text: String) {
    Text(library.sections.find { it.id == a.category }?.title ?: "", color = MaterialTheme.colorScheme.secondary)
    Text(a.title, Modifier.padding(vertical = 18.dp), fontFamily = Amiri, fontSize = 32.sp, lineHeight = 48.sp)
    val minutes = (a.content.split(Regex("\\s+")).size / 180).coerceAtLeast(1)
-   Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
-    if(a.authorImage.startsWith("https://")){
-     coil.compose.AsyncImage(model=readerImageUrl(a.authorImage),contentDescription="صورة الكاتب",
-      modifier=Modifier.size(52.dp).clip(CircleShape).border(2.dp,MaterialTheme.colorScheme.secondary,CircleShape),
-      contentScale=androidx.compose.ui.layout.ContentScale.Crop)
-    }else{
-     Surface(shape=CircleShape,color=MaterialTheme.colorScheme.secondaryContainer,modifier=Modifier.size(52.dp)){
-      Box(contentAlignment=Alignment.Center){Text(a.author.take(1).ifEmpty{"ك"},style=MaterialTheme.typography.titleLarge)}
-     }
-    }
-    Column {
-     Text("بقلم",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.secondary)
-     Text(a.author.ifBlank{"كاتب المقالة"},style=MaterialTheme.typography.titleMedium)
-     Text("${a.publishDate} · $minutes دقائق قراءة",style=MaterialTheme.typography.bodySmall)
-    }
+   Box(Modifier.clickable(enabled=a.author.isNotBlank()){showAuthor=true}.padding(vertical=6.dp)) {
+    AuthorIdentity(a.author,a.authorImage,"${a.publishDate} · $minutes دقائق قراءة")
    }
    Spacer(Modifier.height(20.dp)); Cover(a.coverImage, settings); Spacer(Modifier.height(22.dp))
    if (rendered == null) CircularProgressIndicator()
    // Render image blocks at the exact position they appear in the article.
    // The original TextView-only Markwon renderer silently omitted Markdown image bytes.
-   splitMarkdownMedia(a.content).forEachIndexed { index, part ->
+   parts.forEachIndexed { index, part ->
     key(index) {
+     Column(Modifier.fillMaxWidth().onGloballyPositioned { offsets[index] = it.positionInParent().y.toInt() }) {
      if(part.videoUrl!=null){
       Text(part.label.ifBlank{"فيديو مرفق"},style=MaterialTheme.typography.titleSmall)
-      AndroidView(factory={ctx->
-       VideoView(ctx).apply{
-        setMediaController(MediaController(ctx))
-        setVideoURI(Uri.parse(part.videoUrl))
-        setOnErrorListener{_,_,_->true}
-       }
-      },modifier=Modifier.fillMaxWidth().height(220.dp))
+      ReaderVideo(part.videoUrl)
       Text("اضغط تشغيل للمشاهدة؛ يلزم اتصال الإنترنت.",style=MaterialTheme.typography.labelSmall)
       Spacer(Modifier.height(16.dp))
-     }else if(part.audioUrl!=null||part.documentUrl!=null){
-      val link=part.audioUrl?:part.documentUrl.orEmpty()
+     }else if(part.audioUrl!=null){
+      ReaderAudio(part.audioUrl, part.label)
+      Spacer(Modifier.height(16.dp))
+     }else if(part.documentUrl!=null){
+      val link=part.documentUrl
       OutlinedButton(onClick={runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(link)))};Unit}){
        Icon(Icons.Default.OpenInNew,null)
-       Text(part.label.ifBlank{if(part.audioUrl!=null)"استماع إلى التسجيل" else "فتح الملف المرفق"})
+       Text(part.label.ifBlank{"فتح الملف المرفق"})
       }
      }else if (part.imageUrl != null) {
-      Cover(part.imageUrl, settings)
+      coil.compose.AsyncImage(model=readerImageUrl(part.imageUrl),contentDescription=part.label,
+       modifier=Modifier.fillMaxWidth().heightIn(max=700.dp),contentScale=androidx.compose.ui.layout.ContentScale.FillWidth)
+      if(part.label.isNotBlank())Text(part.label,style=MaterialTheme.typography.bodySmall,modifier=Modifier.padding(vertical=8.dp))
       Spacer(Modifier.height(14.dp))
      } else if (!part.text.isNullOrBlank()) {
       val partContent = part.text.orEmpty()
@@ -296,6 +308,7 @@ private fun share(context: android.content.Context, text: String) {
      }
     }
    }
+   }
    Spacer(Modifier.height(30.dp))
    val published = library.articles.filter { it.id in library.available }; val index = published.indexOfFirst { it.id == a.id }
    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -305,6 +318,20 @@ private fun share(context: android.content.Context, text: String) {
    HorizontalDivider(); Text("برمجة وتطوير: معتز العلقمي — تعز — اليمن — 2026م", Modifier.padding(vertical = 24.dp), style = MaterialTheme.typography.bodyMedium)
   }
  }
+ if (showSettings) ReaderSettingsSheet(settings, vm::configure) { showSettings = false }
+ if (showIndex) AlertDialog(onDismissRequest = { showIndex = false }, title = { Text("فهرس المقالة") },
+  text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+   headings.forEach { (index, title) -> TextButton(onClick = {
+    showIndex = false
+    scope.launch { scroll.animateScrollTo((offsets[index] ?: 0).coerceIn(0, scroll.maxValue)) }
+   }) { Text(title) } }
+  } }, confirmButton = { TextButton(onClick = { showIndex = false }) { Text("إغلاق") } })
+ if (showAuthor) AlertDialog(onDismissRequest = { showAuthor = false }, title = { Text("كتابات "+a.author) },
+  text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+   library.articles.filter { it.id in library.available && (if(a.authorId.isNotBlank())it.authorId==a.authorId else it.author==a.author) }.forEach { entry ->
+    TextButton(onClick = { showAuthor = false; open(entry.id) }) { Text(entry.title) }
+   }
+  } }, confirmButton = { TextButton(onClick = { showAuthor = false }) { Text("إغلاق") } })
 }
 private object MaterialColors { val link = android.graphics.Color.rgb(104, 142, 113) }
 @Composable private fun SettingsPage(settings: ReadingSettings, syncedAt: Long, busy: Boolean, change: (ReadingSettings) -> Unit, sync: () -> Unit, clean: () -> Unit, about: () -> Unit, writer: () -> Unit) {
@@ -328,7 +355,7 @@ private object MaterialColors { val link = android.graphics.Color.rgb(104, 142, 
   OutlinedButton({ confirm = true }) { Text("تنظيف المحتوى غير المحفوظ والصور المؤقتة") }
   TextButton(about) { Text("حول المدونة والتطبيق") }
   OutlinedButton(onClick = writer) { Icon(Icons.Default.Edit, null); Text("لوحة الكاتب — إدارة المقالات") }
-  Text("الجديد في تجربة 3.1: واجهة مجلة عربية، وأبواب قراءة تفاعلية، وبطاقات جديدة.")
+  Text("الجديد في تجربة 3.2: فهرس تفاعلي، تشغيل صوتي داخل المقالة، اكتشاف الكتّاب، وبحث حسب الأبواب.")
   Text("الإصدار ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) • Android 8+")
   Title("سياسة الخصوصية")
   Text("تُحفظ المحفوظات وسجل القراءة والإعدادات على جهازك. لا يطلب التطبيق جهات الاتصال أو الموقع. تُرسل طلبات قراءة المحتوى إلى الموقع الرسمي عبر HTTPS، وقد تحتفظ الاستضافة بسجلات الاتصال المعتادة. تُحمّل أغلفة المقالات من روابطها الخارجية وفق إعداد Wi-Fi. لا يضم التطبيق أدوات إعلانات أو تحليلات. لوحة الكاتب تتطلب مصادقة مستقلة وآمنة.", lineHeight = 28.sp)

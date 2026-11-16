@@ -23,3 +23,28 @@ fun splitMarkdownMedia(markdown:String):List<MarkdownPart> {
  if(offset<markdown.length||parts.isEmpty())parts.add(MarkdownPart(text=markdown.substring(offset)))
  return parts
 }
+
+/** Split at actual ATX headings so the native reader can navigate without changing Markdown. */
+fun readerParts(markdown: String): List<MarkdownPart> = splitMarkdownMedia(markdown).flatMap { part ->
+ val text = part.text
+ if (text == null) listOf(part) else {
+  val result = mutableListOf<MarkdownPart>()
+  val buffer = StringBuilder()
+  var fence: Char? = null
+  for (line in text.splitToSequence("\n")) {
+   val trimmed = line.trimStart()
+   val isFence = trimmed.startsWith("```") || trimmed.startsWith("~~~")
+   val heading = fence == null && Regex("^#{1,6}\\s+.+").matches(line)
+   if (heading && buffer.isNotEmpty()) { result.add(MarkdownPart(text = buffer.toString())); buffer.clear() }
+   buffer.append(line).append('\n')
+   if (isFence) {
+    if (fence == null) fence = trimmed.first() else if (fence == trimmed.first()) fence = null
+   }
+  }
+  if (buffer.isNotEmpty()) result.add(MarkdownPart(text = buffer.toString().removeSuffix("\n")))
+  result
+ }
+}
+fun partHeading(part: MarkdownPart): String? = part.text?.lineSequence()?.firstOrNull()?.let {
+ Regex("^#{1,6}\\s+(.+?)\\s*#*\\s*$").matchEntire(it)?.groupValues?.get(1)
+}

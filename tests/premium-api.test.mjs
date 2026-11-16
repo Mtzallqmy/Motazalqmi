@@ -8,7 +8,7 @@ function fake(query={},method='GET',headers={}) {
  const h={}; const res={statusCode:200,body:null,setHeader(k,v){h[k]=v},status(s){this.statusCode=s;return this},json(b){this.body=b;return this},send(b){this.body=JSON.parse(b);return this},end(){return this}};
  return {req:{method,query,headers},res,h};
 }
-const handler=createHandler({snapshot:async()=>snapshot,list:async args=>({articles:[],total:0,...args})});
+const handler=createHandler({releases:async()=>({versions:[],latest:null,available:false}),snapshot:async()=>snapshot,list:async args=>({articles:[],total:0,...args})});
 test('sync returns complete empty snapshot so all removed articles can be retired',async()=>{
  const x=fake({resource:'sync'});await handler(x.req,x.res);assert.equal(x.res.statusCode,200);assert.equal(x.res.body.complete,true);assert.equal(x.res.body.total,0);
 });
@@ -25,7 +25,7 @@ test('search is bounded and featured filtering is passed to parameterized querie
 });
 test('configuration and versions disclose no fabricated released APK',async()=>{
  const x=fake({resource:'config'});await handler(x.req,x.res);assert.equal(x.res.body.syncMode,'snapshot');
- const y=fake({resource:'versions'});await handler(y.req,y.res);assert.equal(y.res.body.versions[0].downloadUrl,null);
+ const y=fake({resource:'versions'});await handler(y.req,y.res);assert.deepEqual(y.res.body.versions,[]);assert.equal(y.res.body.latest,null);
  const z=fake({resource:'unknown'});await handler(z.req,z.res);assert.equal(z.res.statusCode,404);
 });
 test('editorial metadata is read from the same supplied storage source',async()=>{

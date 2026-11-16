@@ -18,3 +18,16 @@ test('native upload ticket requires an authenticated writer',async()=>{
  const response={setHeader(){},status(n){this.code=n;return this},json(){}};
  await createTicketHandler(()=>assert.fail())({method:'POST',headers:{}},response);assert.equal(response.code,401);
 });
+
+import {publishedReleases,releaseCatalogue} from '../server/releases.js';
+test('release catalogue includes newer prereleases and ignores unpublished artifacts',async()=>{
+ const url='https://github.com/Mtzallqmy/Motazalqmi/releases/download/';
+ const data=publishedReleases([
+  {tag_name:'v2.0.0',assets:[{name:'app.apk',browser_download_url:url+'v2.0.0/app.apk'}]},
+  {tag_name:'v3.2.0-independent.1',prerelease:true,assets:[{name:'app.apk',browser_download_url:url+'v3.2.0-independent.1/app.apk'}]},
+  {tag_name:'v9.0.0',draft:true,assets:[{name:'app.apk',browser_download_url:url+'v9.0.0/app.apk'}]}
+ ]);
+ assert.equal(data[0].version,'3.2.0');assert.equal(data[0].installation,'independent');
+ assert.equal(data.length,2);
+ const fail=await releaseCatalogue(async()=>({ok:false}));assert.equal(fail.latest,null);assert.equal(fail.available,false);
+});
