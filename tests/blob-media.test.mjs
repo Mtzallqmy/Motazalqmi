@@ -13,3 +13,16 @@ test('media endpoint requires POST and available storage',async()=>{
  const h=createUploadHandler({handle:async()=>{throw Error('Must not be called')}});
  await h({method:'GET',headers:{}},r);assert.equal(r.code,405);
 });
+
+import {generateClientTokenFromReadWriteToken,getPayloadFromClientToken} from '@vercel/blob/client';
+import {randomBytes} from 'node:crypto';
+test('Blob SDK generates path-scoped tokens with the patched validation dependency',async()=>{
+ const token='vercel_blob_rw_teststore_'+randomBytes(24).toString('hex');
+ const signed=await generateClientTokenFromReadWriteToken({token,pathname:'media/verification.mp3',
+  allowedContentTypes:['audio/mpeg'],maximumSizeInBytes:4096,validUntil:Date.now()+60000});
+ assert(signed.startsWith('vercel_blob_client_'));
+ assert(!signed.includes(token));
+ const payload=getPayloadFromClientToken(signed);
+ assert.equal(payload.pathname,'media/verification.mp3');
+ assert.equal(payload.maximumSizeInBytes,4096);
+});
