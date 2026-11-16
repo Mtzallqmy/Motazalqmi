@@ -73,7 +73,10 @@ private fun audioTime(ms: Int): String = "%d:%02d".format(ms / 60000, ms / 1000 
 @Composable internal fun ReaderSettingsSheet(settings: ReadingSettings, change: (ReadingSettings) -> Unit, dismiss: () -> Unit) {
  ModalBottomSheet(onDismissRequest = dismiss) {
   Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-   Text("مساحتك للقراءة", style = MaterialTheme.typography.headlineMedium)
+   Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+    Text("مساحتك للقراءة", modifier=Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
+    TextButton(onClick=dismiss){Text("تم")}
+   }
    Text("حجم الخط · ${settings.size.toInt()}")
    Slider(settings.size, { change(settings.copy(size = it)) }, valueRange = 16f..34f)
    Text("تباعد السطور")

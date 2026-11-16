@@ -71,7 +71,7 @@ class ReaderUiTest {
   rule.onNodeWithContentDescription("إعدادات القراءة").performClick()
   rule.onNodeWithText("مساحتك للقراءة").assertIsDisplayed()
   rule.onNodeWithText("نهاري").performClick()
-  rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+  rule.onNodeWithText("تم").performClick()
   rule.onNodeWithContentDescription("فهرس المقالة").performClick()
   rule.onNodeWithText("فهرس المقالة").assertIsDisplayed()
   rule.onNodeWithText("إغلاق").performClick()
