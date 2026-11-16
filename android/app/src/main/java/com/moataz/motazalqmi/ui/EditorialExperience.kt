@@ -33,42 +33,22 @@ private val Brass = Color(0xFFF0D38D)
  val sections = library.sections.filter { it.id != "about" }
  LazyColumn(Modifier.fillMaxSize().testTag("home-feed"), contentPadding = PaddingValues(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(19.dp)) {
   item {
-   Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF082B27), Color(0xFF1A685A), Emerald))).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+   Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-     Surface(shape = CircleShape, color = Color.White.copy(alpha = .14f)) {
-      Icon(Icons.Default.AutoStories, null, Modifier.padding(11.dp).size(26.dp), tint = Brass)
+     Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+      Icon(Icons.Default.AutoStories, null, Modifier.padding(11.dp).size(26.dp), tint = MaterialTheme.colorScheme.primary)
      }
      Spacer(Modifier.weight(1f))
-     Text("المجلة الثقافية  •  "+BuildConfig.VERSION_NAME, color = Brass, style = MaterialTheme.typography.labelMedium)
-     IconButton(onClick = sync, enabled = !busy) { Icon(Icons.Default.Sync, "تحديث المحتوى", tint = Color.White) }
+     Text("المجلة الثقافية  •  "+BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium)
+     IconButton(onClick = sync, enabled = !busy) { Icon(Icons.Default.Sync, "تحديث المحتوى", tint = MaterialTheme.colorScheme.primary) }
     }
-    Text("مساحة للكلمة التي تبقى", color = Brass, style = MaterialTheme.typography.labelMedium)
-    Text(library.siteName, fontFamily = Amiri, fontSize = 38.sp, lineHeight = 52.sp, color = Color.White)
-    Text(library.tagline, color = Color(0xFFE1EAE5), fontSize = 16.sp, lineHeight = 26.sp)
-    HorizontalDivider(color = Color.White.copy(alpha = .24f))
+    Text(library.siteName, fontFamily = Amiri, fontSize = 38.sp, lineHeight = 52.sp, color = MaterialTheme.colorScheme.onBackground)
+    Text(library.tagline, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp, lineHeight = 26.sp)
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-     Text(published.size.toString() + " مقالات", color = Brass, style = MaterialTheme.typography.labelMedium)
-     Text(sections.size.toString() + " أبواب", color = Brass, style = MaterialTheme.typography.labelMedium)
-     Text("قراءة دون اتصال", color = Color.White, style = MaterialTheme.typography.labelSmall)
-    }
-   }
-  }
-  item {
-   Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    Text("تجوّل بين أبواب الكلمة", fontFamily = Amiri, fontSize = 28.sp, lineHeight = 38.sp)
-    Text("الأدب والفكر والتاريخ بين يديك", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-     items(sections, key = { it.id }) { category ->
-      ElevatedCard(onClick = { section(category.id) }, modifier = Modifier.width(176.dp), shape = RoundedCornerShape(20.dp)) {
-       Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
-         Icon(sectionIcon(category.id), null, Modifier.padding(9.dp).size(22.dp), tint = MaterialTheme.colorScheme.primary)
-        }
-        Text(category.title, fontFamily = Amiri, fontSize = 22.sp, maxLines = 1)
-        Text(category.subtitle, style = MaterialTheme.typography.bodySmall, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
-       }
-      }
-     }
+     Text(published.size.toString() + " مقالات", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium)
+     Text(sections.size.toString() + " أبواب", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium)
+     Text("قراءة دون اتصال", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
     }
    }
   }
@@ -94,6 +74,24 @@ private val Brass = Color(0xFFF0D38D)
     }
    }
   }
+  item {
+   Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Text("أبواب المجلة", fontFamily = Amiri, fontSize = 28.sp, lineHeight = 38.sp)
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+     items(sections, key = { it.id }) { category ->
+      ElevatedCard(onClick = { section(category.id) }, modifier = Modifier.width(156.dp), shape = RoundedCornerShape(20.dp)) {
+       Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+         Icon(sectionIcon(category.id), null, Modifier.padding(9.dp).size(22.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        Text(category.title, fontFamily = Amiri, fontSize = 22.sp, lineHeight = 34.sp, maxLines = 2)
+        Text(category.subtitle, style = MaterialTheme.typography.bodySmall, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+       }
+      }
+     }
+    }
+   }
+  }
   val recent = library.states.values.filter { it.progress > 0f && it.progress < 1f }.maxByOrNull { it.openedAt }
   val resume = recent?.let { state -> library.articles.find { it.id == state.id } }
   if (recent != null && resume != null) item {
@@ -112,6 +110,7 @@ private val Brass = Color(0xFFF0D38D)
      Text("من روائع البيان", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
      Text(quote.text, fontFamily = Amiri, fontSize = 23.sp, lineHeight = 37.sp)
      Text(quote.author, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+     TextButton(onClick={section("quotes")}) { Text("تصفّح الاقتباسات") }
     }
    }
   } }
