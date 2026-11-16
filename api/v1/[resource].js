@@ -1,3 +1,4 @@
+import {releaseCatalogue} from '../../server/releases.js';
 import { studio } from '../../server/editorialStudio.js';
 import { discovery } from '../../server/articleDiscovery.js';
 import mobileAdminHandler from '../../server/mobileAdmin.js';
@@ -13,7 +14,7 @@ import { publicGet, sendJson, publicError, listPublished, param, boundedInt } fr
 import { pageSnapshot } from '../../server/contentSnapshot.js';
 import { publishedSnapshot } from '../../server/snapshot.js';
 
-export function createHandler({snapshot=publishedSnapshot,list=listPublished}={}) {
+export function createHandler({snapshot=publishedSnapshot,list=listPublished,releases=releaseCatalogue}={}) {
  return async function handler(req,res) {
   const resource=param(req,'resource',30);
   // Consolidated into this dynamic route to stay within Vercel Hobby's 12-function quota.
@@ -46,14 +47,13 @@ export function createHandler({snapshot=publishedSnapshot,list=listPublished}={}
     }
     case 'config': return sendJson(req,res,{apiVersion:1,syncMode:'snapshot',syncPath:'/api/v1/sync',maxSnapshotArticles:2000,
       officialUrl:'https://motazalqmi.vercel.app',privacy:'Reader data stays on your device. HTTPS requests may be logged by the hosting provider.'});
-    case 'versions': return sendJson(req,res,{apiVersion:1,versions:[{version:'2.1.0',versionCode:20100,minSdk:26,status:'development',downloadUrl:null},
-      {version:'2.0.0',versionCode:20000,minSdk:26,status:'released',downloadUrl:'https://github.com/Mtzallqmy/Motazalqmi/releases/download/v2.0.0/Motazalqmi-v2.0.0-release.apk'}]});
+    case 'versions': return sendJson(req,res,{apiVersion:1,...await releases()});
     default: return res.status(404).json({apiVersion:1,code:'NOT_FOUND',error:'Unknown resource'});
    }
   } catch(e) { return publicError(res,e); }
  };
 }
-export function createResourceHandler(load) {
- return createHandler({snapshot:async()=>{const s=await load();return {apiVersion:1,mode:'snapshot',complete:true,...s,total:s.articles.length}},list:async(options)=>pageSnapshot(await load(),options)});
+export function createResourceHandler(load,releases=releaseCatalogue) {
+ return createHandler({releases,snapshot:async()=>{const s=await load();return {apiVersion:1,mode:'snapshot',complete:true,...s,total:s.articles.length}},list:async(options)=>pageSnapshot(await load(),options)});
 }
 export default createHandler();

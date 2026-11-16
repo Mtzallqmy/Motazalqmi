@@ -46,7 +46,7 @@ test('snapshot is published only, atomic and changes revision on deletion',async
  assert.deepEqual(syncManifest(b).ids,[]);assert.equal(syncManifest(a).authoritative,true);
 });
 test('new API resources report snapshots, validation, ETags and failures',async()=>{
- const handler=createResourceHandler(async()=>snapshot);
+ const handler=createResourceHandler(async()=>snapshot,async()=>({versions:[],latest:null,available:false}));
  for(const resource of ['sync','search','featured','config','versions']) {
   const x=fake({query:{resource,q:'ابداع',since:snapshot.revision}});await handler(x.req,x.res);
   assert.equal(x.res.statusCode,200,resource);assert.equal(JSON.parse(x.res.body).apiVersion,1);
