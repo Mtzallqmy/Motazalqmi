@@ -1,0 +1,33 @@
+import {createRequire} from 'node:module';
+import {readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const {chromium}=createRequire(import.meta.url)('playwright');
+const browser=await chromium.launch({headless:true});
+try {
+ const page=await browser.newPage({viewport:{width:393,height:852},reducedMotion:'reduce'});
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ const seed=JSON.parse(await readFile('android/app/src/main/assets/bootstrap.json','utf8'));
+ let admin=false;
+ await page.route('**/api/session',route=>route.fulfill({json:{user:admin?{email:'editor@example.invalid'}:null}}));
+ await page.route('**/api/articles*',route=>route.fulfill({json:{articles:seed.articles,editorial:seed}}));
+ await page.route('**/api/v1/authors',route=>route.fulfill({json:{authors:[]}}));
+ await page.goto('http://localhost:4173');
+ await page.locator('.lead-text h2 a').waitFor();
+ assert(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth));
+ await page.screenshot({path:'mobile-home.png',animations:'disabled'});
+ await page.locator('.lead-text h2 a').click();
+ await page.locator('.reader-controls summary').click();
+ await page.getByLabel('حجم الخط').selectOption('28');
+ await page.reload();
+ await page.locator('.article-prose').waitFor();
+ assert.equal(await page.locator('.article-prose').evaluate(el=>getComputedStyle(el).fontSize),'28px');
+ await page.locator('.reader-controls summary').click();await page.getByLabel('المظهر').selectOption('night');
+ assert(await page.locator('.reader-surface.night').count());
+ await page.setViewportSize({width:1440,height:900});await page.goto('http://localhost:4173');await page.locator('.lead-text').waitFor();
+ await page.screenshot({path:'desktop-home.png',animations:'disabled'});
+ admin=true;await page.goto('http://localhost:4173/admin?edit='+seed.articles[0].id);
+ const body=page.locator('#article-content');await body.waitFor();await body.fill('نص اختبار محفوظ محليًا');
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.reload();
+ await body.waitFor();assert.equal(await body.inputValue(),'نص اختبار محفوظ محليًا');assert.deepEqual(errors,[]);
+ console.log('PASS RTL mobile layout, desktop layout, reader preference reload and editor recovery after refresh');
+}finally{await browser.close();}

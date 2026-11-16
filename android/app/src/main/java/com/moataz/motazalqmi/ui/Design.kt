@@ -19,9 +19,10 @@ val Amiri = FontFamily(Font(R.font.amiri))
  val dark = theme == "dark" || (theme == "system" && isSystemInDarkTheme())
  val colors = if (dark) darkColorScheme(primary = Color(0xFFD6BC82), secondary = Color(0xFF9AC6B9),
   background = Color(0xFF191C19), surface = Color(0xFF202620), onSurface = Color(0xFFF2E9D7), onBackground = Color(0xFFF2E9D7))
- else lightColorScheme(primary = Teal, secondary = Gold, background = Paper, surface = Color(0xFFFFFCF5), primaryContainer = Color(0xFFE4EFEA), surfaceVariant = Color(0xFFF1E8D9), onSurface = Ink, onBackground = Ink)
+ else lightColorScheme(primary = Teal, secondary = Color(0xFF795A28), background = Paper, surface = Color(0xFFFFFCF5), primaryContainer = Color(0xFFE4EFEA), surfaceVariant = Color(0xFFF1E8D9), onSurface = Ink, onBackground = Ink)
  val base = Typography()
  MaterialTheme(colorScheme = colors, typography = base.copy(
+  bodySmall = base.bodySmall.copy(fontFamily = Plex), labelSmall = base.labelSmall.copy(fontFamily = Plex),
   bodyLarge = base.bodyLarge.copy(fontFamily = Plex), bodyMedium = base.bodyMedium.copy(fontFamily = Plex),
   titleLarge = base.titleLarge.copy(fontFamily = Amiri), titleMedium = base.titleMedium.copy(fontFamily = Plex),
   labelLarge = base.labelLarge.copy(fontFamily = Plex), labelMedium = base.labelMedium.copy(fontFamily = Plex),
