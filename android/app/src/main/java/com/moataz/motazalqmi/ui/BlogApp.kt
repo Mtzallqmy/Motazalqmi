@@ -354,8 +354,8 @@ private object MaterialColors { val link = android.graphics.Color.rgb(104, 142, 
   Text("يتحقق التطبيق في الخلفية دوريًا عند توفر الاتصال والبطارية المناسبة. قد يؤخر النظام التنفيذ.", style = MaterialTheme.typography.bodyMedium)
   OutlinedButton({ confirm = true }) { Text("تنظيف المحتوى غير المحفوظ والصور المؤقتة") }
   TextButton(about) { Text("حول المدونة والتطبيق") }
-  OutlinedButton(onClick = writer) { Icon(Icons.Default.Edit, null); Text("لوحة الكاتب — إدارة المقالات") }
-  Text("الجديد في تجربة 3.2: فهرس تفاعلي، تشغيل صوتي داخل المقالة، اكتشاف الكتّاب، وبحث حسب الأبواب.")
+  OutlinedButton(onClick = writer) { Icon(Icons.Default.Edit, null); Text("لوحة الكاتب — المقالات والكتّاب والوسائط") }
+  Text("الجديد في تجربة 3.3: جدولة النشر، إدارة الكتّاب وصورهم، ومكتبة وسائط بحذف آمن؛ مع أدوات القراءة والمحفوظات دون اتصال.")
   Text("الإصدار ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) • Android 8+")
   Title("سياسة الخصوصية")
   Text("تُحفظ المحفوظات وسجل القراءة والإعدادات على جهازك. لا يطلب التطبيق جهات الاتصال أو الموقع. تُرسل طلبات قراءة المحتوى إلى الموقع الرسمي عبر HTTPS، وقد تحتفظ الاستضافة بسجلات الاتصال المعتادة. تُحمّل أغلفة المقالات من روابطها الخارجية وفق إعداد Wi-Fi. لا يضم التطبيق أدوات إعلانات أو تحليلات. لوحة الكاتب تتطلب مصادقة مستقلة وآمنة.", lineHeight = 28.sp)
