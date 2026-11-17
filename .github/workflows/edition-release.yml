@@ -2,7 +2,7 @@ name: Motaz 3.3 verified release
 on:
   push:
     branches: [main, feat/motazalqami-complete-editorial-33]
-    paths: ['android/**', 'src/**', 'server/**', 'shared/**', 'tests/**', 'package*.json', '.github/workflows/edition-release.yml']
+    paths: ['android/**', 'src/**', 'server/**', 'shared/**', 'api/**', 'db/**', 'scripts/**', 'vercel.json', 'tests/**', 'package*.json', '.github/workflows/edition-release.yml']
   workflow_dispatch:
 permissions:
   contents: read

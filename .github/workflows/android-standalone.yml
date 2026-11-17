@@ -1,10 +1,5 @@
-name: Android 8 Plus Installable ARM64 Preview
+name: Archive — ARM64 standalone preview (manual)
 on:
-  push:
-    branches: [main, feat/motazalqmi-native-editorial-v31]
-    paths:
-      - 'android/**'
-      - '.github/workflows/android-standalone.yml'
   workflow_dispatch:
 permissions:
   contents: read

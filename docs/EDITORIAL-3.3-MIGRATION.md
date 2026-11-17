@@ -6,4 +6,4 @@ Media deletion reserves an unreferenced Blob URL in a transaction before touchin
 
 A storage failure leaves a pending deletion that the administrator can retry. A completed deletion cannot be reinserted into article content. The UI requires explicit confirmation and the API verifies membership in the existing Blob store.
 
-For rollback, deploy the previous application version while retaining the additive view, reservation table and guards. Do not drop reservations for files already deleted from storage. Published data and identities require no destructive conversion.
+For rollback, retain the additive view, reservation table and guards. Prefer reverting frontend/native changes while keeping the public API queries on blog_published_articles. A full rollback to the 3.2 server would read blog_articles directly and could expose future scheduled content: pause editorial writes and move every not-yet-due publication to draft before such a rollback, preserving its schedule in an exported record or revision for restoration. Do not drop reservations for files already deleted from storage. Published data and identities require no destructive conversion.

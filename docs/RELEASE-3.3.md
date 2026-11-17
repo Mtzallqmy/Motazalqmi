@@ -1,6 +1,6 @@
 # Motaz Alalqami 3.3 — استوديو النشر
 
-This release continues the native and web magazine delivered in 3.2. The canonical source is the main branch of Mtzallqmy/Motazalqmi. PR #8 contains the implementation milestones.
+This release continues the native and web magazine delivered in 3.2. The canonical source is the main branch of Mtzallqmy/Motazalqmi. The current edition-release workflow owns automatic verification and release delivery. Historical Android workflows remain available for manual runs, avoiding duplicate builds and old-version artifact names on new commits. PR #8 contains the implementation milestones.
 
 ## Working changes
 
@@ -26,6 +26,8 @@ The existing session, snapshot and Markdown contracts remain in use. This is a n
 Migration 004 was first validated on the existing isolated Neon verification branch. It was then applied transactionally to Neon main on 17 November 2026. The five production articles and their content digest were unchanged before and after migration. The new public view returned those same five articles. Migration rollback guidance is in EDITORIAL-3.3-MIGRATION.md.
 
 The implementation passed 46 JavaScript tests, the project check and Vite build. Chromium checks cover mobile RTL layout, desktop layout, reader preference persistence, editor recovery, scheduled-content exclusion, and refusal to remove referenced media. Native unit tests and lint passed. Seven instrumentation tests passed on each of API 26, 28 and 29, including explicit media-deletion confirmation and preservation of an edited author's identity. The exact signed ARM64 artifact passed installation and offline launch on an API 35 emulator using ARM translation. GitHub Actions records contain the individual results.
+
+`scripts/verify-editorial33.mjs` exercises the real server handlers with an isolated Neon connection and the existing Blob store. It requires DATABASE_URL, BLOB_READ_WRITE_TOKEN and MOTAZ_VERIFY_ISOLATED=true, generates temporary authentication in memory, and cleans up its own uploaded file and records. Never point a verification run at production. This integration run passed on 17 November 2026: author create/edit, future-publication privacy, due Android snapshot visibility, optimistic conflicts, actual Blob upload, referenced-file deletion rejection, successful unused-file deletion, idempotent retry, prevention of reuse after deletion, and cleanup. Authenticated preview HTTP checks separately confirmed scheduled-content privacy and publication visibility; a later deployment-protection response interrupted the preview media sequence, which was then completed through the real server handlers with the cloud services.
 
 These are emulator checks. No physical-device verification or measured Core Web Vitals improvement is claimed.
 
