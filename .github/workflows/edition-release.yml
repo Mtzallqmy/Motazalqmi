@@ -73,12 +73,12 @@ jobs:
             pkg="$pkg.edition33"
             export ANDROID_KEYSTORE_PASSWORD="$(openssl rand -hex 32)"
             export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
-            export ANDROID_KEY_ALIAS=edition3
-            keytool -genkeypair -keystore "$ANDROID_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEY_PASSWORD -alias edition3 -keyalg RSA -keysize 3072 -validity 10000 -dname 'CN=Motaz Alalqami Independent Edition'
+            export ANDROID_KEY_ALIAS=edition33
+            keytool -genkeypair -keystore "$ANDROID_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEY_PASSWORD -alias edition33 -keyalg RSA -keysize 3072 -validity 10000 -dname 'CN=Motaz Alalqami Independent Edition'
             printf '%s' "$ANDROID_KEYSTORE_PASSWORD" > "$RUNNER_TEMP/password.txt"
             cp "$RUNNER_TEMP/password.txt" "$RUNNER_TEMP/key-password.txt"
             printf '%s' "$ANDROID_KEY_ALIAS" > "$RUNNER_TEMP/alias.txt"
-            tar -C "$RUNNER_TEMP" -cf - release.jks password.txt key-password.txt alias.txt | openssl cms -encrypt -aes-256-cbc -binary -outform DER -out dist/edition3-recovery.cms android/release/recovery-certificate.pem
+            tar -C "$RUNNER_TEMP" -cf - release.jks password.txt key-password.txt alias.txt | openssl cms -encrypt -aes-256-cbc -binary -outform DER -out dist/edition33-recovery.cms android/release/recovery-certificate.pem
           fi
           bash android/gradlew -p android :app:testDebugUnitTest :app:lintDebug :app:assembleRelease "${abi[@]}" --no-daemon
           apk="dist/Motazalqmi-3.3.0-${pkg##*.}-ARM64.apk"
@@ -179,5 +179,5 @@ jobs:
           fi
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
           printf '%s\n\n' "$note" > RELEASE-NOTES.md
-          printf '%s\n' 'Android 8+ · ARM64 · Release optimized' 'واجهة مجلة ثقافية، صور الكتّاب، فهرس تفاعلي، تخصيص القراءة من داخل النص، تشغيل صوتي، بحث حسب الأبواب، ومكتبة محفوظات.' 'الموقع ولوحة الكاتب والمزامنة تستخدم المستودع الرئيسي. تحقق الملف بشهادة Android وzipalign وSHA256. اختبارات الواجهة على API 26 و28 و29 واختبار تشغيل الملف الموقّع على API35 مع ترجمة ARM.' 'التوقيع المستقل يثبّت تطبيقًا بجانب الإصدارات السابقة، وتبقى محفوظاتها داخلها. احتفظ بها أثناء الانتقال.' >> RELEASE-NOTES.md
-          gh release create "$tag" * -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" --title 'مدونة معتز العلقمي 3.3 — رحاب القراءة' --notes-file RELEASE-NOTES.md
+          printf '%s\n' 'Android 8+ · ARM64 · Release optimized' 'جدولة النشر من الموقع والتطبيق، إدارة ملفات الكتّاب وصورهم، مكتبة وسائط أصلية مع حذف آمن يمنع فقد الملفات المستخدمة، وحفظ المسودات محليًا. تظل تجربة القراءة والمحفوظات والعمل دون اتصال متاحة.' 'الموقع ولوحة الكاتب والمزامنة تستخدم المستودع الرئيسي. تحقق الملف بشهادة Android وzipalign وSHA256. اختبارات الواجهة على API 26 و28 و29 واختبار تشغيل الملف الموقّع على API35 مع ترجمة ARM.' 'Telegram: أضيف التحقق من هوية البوت وWebhook وتأكيد تغيير الإعدادات ودعم المرفقات المحدودة. التشغيل الفعلي يتطلب رمزًا مجدّدًا في متغيرات Vercel وربط المدير واختبار الأوامر.' 'التوقيع المستقل يثبّت تطبيقًا بجانب الإصدارات السابقة، وتبقى محفوظاتها داخلها. احتفظ بها أثناء الانتقال.' >> RELEASE-NOTES.md
+          gh release create "$tag" * -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" --title 'مدونة معتز العلقمي 3.3 — استوديو النشر' --notes-file RELEASE-NOTES.md

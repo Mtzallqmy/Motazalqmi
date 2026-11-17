@@ -5,7 +5,7 @@
       "maxDuration": 15
     },
     "api/v1/*.js": {
-      "maxDuration": 15
+      "maxDuration": 30
     }
   },
   "rewrites": [

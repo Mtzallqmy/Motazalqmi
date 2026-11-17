@@ -88,10 +88,8 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
     const pair=telegramCommand(msg?.text);
     if(pair?.name==='link'&&/^[a-f0-9]{40}$/.test(pair.args)){
      const hash=createHash('sha256').update(pair.args).digest('hex');
-     const matches=await sql.query("DELETE FROM blog_public_metadata WHERE id='telegram_pair' AND data->>'hash'=$1 AND (data->>'expiresAt')::bigint>$2::bigint RETURNING id",[hash,String(Date.now())]);
+     const matches=await sql.query("WITH consumed AS (DELETE FROM blog_public_metadata WHERE id='telegram_pair' AND data->>'hash'=$1 AND (data->>'expiresAt')::bigint>$2::bigint RETURNING id) INSERT INTO blog_public_metadata(id,data) SELECT 'telegram_admin',jsonb_build_object('ids',jsonb_build_array($3::text)) FROM consumed ON CONFLICT(id) DO UPDATE SET data=jsonb_build_object('ids',(SELECT jsonb_agg(DISTINCT value) FROM jsonb_array_elements_text(COALESCE(blog_public_metadata.data->'ids','[]'::jsonb)||(EXCLUDED.data->'ids')))) ,updated_at=NOW() RETURNING id",[hash,String(Date.now()),actorId]);
      if(matches.length){
-      const list=new Set([...(adminRows[0]?.data?.ids||[]),actorId]);
-      await sql.query("INSERT INTO blog_public_metadata(id,data) VALUES ('telegram_admin',$1::jsonb) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",[JSON.stringify({ids:[...list]})]);
       await reply('✅ تم ربط حسابك بلوحة إدارة مدونة معتز العلقمي. أرسل /help.');
      }else await reply('رمز الربط منتهي أو غير صحيح. أنشئ رمزًا جديدًا من لوحة الكاتب.');
     }
@@ -117,10 +115,23 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
     return r[0].data;
    };
    const setEditorial=async data=>sql.query("UPDATE blog_public_metadata SET data=$1::jsonb,updated_at=NOW() WHERE id='editorial'",[JSON.stringify(data)]);
+   const confirmSetting=async(field,value)=>{
+    const nonce=randomUUID().replaceAll('-','').slice(0,20);
+    await sql.query('INSERT INTO blog_public_metadata(id,data) VALUES($1,$2::jsonb) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()',
+     ['telegram_setting:'+actorId,JSON.stringify({nonce,field,value,expiresAt:Date.now()+600000})]);
+    await reply('تأكيد تغيير '+(field==='about'?'نبذة المدونة':'عبارة المدونة')+'؟\n'+value.slice(0,400),[[{text:'تأكيد التغيير',callback_data:'setting:'+nonce},{text:'إلغاء',callback_data:'cancel'}]]);
+   };
    const done=async a=>reply((isScheduled(a)?'🕒 مجدول: ':a.status==='published'?'✅ منشور: ':'📝 مسودة: ')+a.title+'\n'+articleLink(a.slug));
    if(cb){
     await call('answerCallbackQuery',{callback_query_id:cb.id});
     if(cb.data==='cancel'){await reply('أُلغيت العملية.');return res.status(200).json({ok:true});}
+    if(typeof cb.data==='string'&&cb.data.startsWith('setting:')){
+     const rows=await sql.query("DELETE FROM blog_public_metadata WHERE id=$1 AND data->>'nonce'=$2 AND (data->>'expiresAt')::bigint>$3::bigint RETURNING data",['telegram_setting:'+actorId,cb.data.slice(8),String(Date.now())]);
+     const pending=rows[0]?.data;
+     if(!pending||!['about','tagline'].includes(pending.field)||typeof pending.value!=='string'){await reply('انتهى التأكيد أو استُخدم. أعد تنفيذ الأمر.');return res.status(200).json({ok:true});}
+     await sql.query("UPDATE blog_public_metadata SET data=jsonb_set(data,ARRAY['site',$1],to_jsonb($2::text),true),updated_at=NOW() WHERE id='editorial'",[pending.field,pending.value]);
+     await reply('تم تحديث إعداد المدونة.');return res.status(200).json({ok:true});
+    }
     if(typeof cb.data==='string'&&cb.data.startsWith('qdel:')){
      const parts=cb.data.split(':'),index=Number(parts[1]),signature=parts[2];
      const current=await getEditorial(),quotes=[...(current.quotes||[])];
@@ -158,7 +169,7 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
     const title=cmd.args.slice(0,pos).trim(),content=cmd.args.slice(pos+1).trim();
     const id=Number.isSafeInteger(msg.message_id)?'art-tg-'+actorId+'-'+msg.message_id:'art-'+randomUUID();
     const date=new Date(Date.now()+3*60*60*1000).toISOString().slice(0,10);
-    const a=normalizeArticle({id,title,content,status:'draft',slug:slugify(title)+'-'+randomUUID().slice(0,6),
+    const a=normalizeArticle({id,title,content,status:'draft',slug:slugify(title)+'-'+(Number.isSafeInteger(msg.message_id)?actorId+'-'+msg.message_id:randomUUID().slice(0,6)),
      category:'general',coverImage:'',author:'معتز العلقمي',publishDate:date});
     await sql.query('INSERT INTO blog_articles(id,slug,status,publish_date,data) VALUES ($1,$2,$3,$4::date,$5::jsonb) ON CONFLICT(id) DO NOTHING',
      [id,a.slug,a.status,a.publishDate,JSON.stringify(a)]);
@@ -210,9 +221,7 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
     await reply('🏛 '+(data.site?.name||'مدونة معتز العلقمي')+'\n'+(data.site?.tagline||'')+'\n'+SITE);
    }else if(cmd.name==='aboutset'){
     if(!cmd.args||cmd.args.length<10||cmd.args.length>12000)throw Error('اكتب نبذة من 10 أحرف فأكثر.');
-    const current=await getEditorial();
-    await setEditorial({...current,site:{...current.site,about:cmd.args}});
-    await reply('✅ حُدّثت صفحة حول المدونة.');
+    await confirmSetting('about',cmd.args);
    }else if(cmd.name==='quotes'){
     const data=await getEditorial();
     const quotes=data.quotes||[];
@@ -233,9 +242,7 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
      [[{text:'تأكيد الحذف',callback_data:'qdel:'+index+':'+signature},{text:'إلغاء',callback_data:'cancel'}]]);
    }else if(cmd.name==='tagline'){
     if(!cmd.args||cmd.args.length>240)throw Error('اكتب عبارة لا تزيد على 240 حرفًا.');
-    const current=await getEditorial();
-    await setEditorial({...current,site:{...current.site,tagline:cmd.args}});
-    await reply('✅ تم تحديث شعار المدونة.');
+    await confirmSetting('tagline',cmd.args);
    }else await reply('أمر غير معروف. أرسل /help.');
    return res.status(200).json({ok:true});
   }catch(e){
