@@ -1,3 +1,4 @@
+import mediaDeleteHandler from '../../server/mediaDeletion.js';
 import {releaseCatalogue} from '../../server/releases.js';
 import { studio } from '../../server/editorialStudio.js';
 import { discovery } from '../../server/articleDiscovery.js';
@@ -21,6 +22,7 @@ export function createHandler({snapshot=publishedSnapshot,list=listPublished,rel
   if(['authors','revisions','assets'].includes(resource)) return studio(req,res,resource);
   if(resource==='article-page'||resource==='sitemap') return discovery(req,res,resource);
   if(resource==='mobile-admin') return mobileAdminHandler(req,res);
+  if(resource==='media-delete') return mediaDeleteHandler(req,res);
   if(resource==='media-upload') return blobUploadHandler(req,res);
   if(resource==='media-ticket') return ticketHandler(req,res);
   if(resource==='media-direct') return mediaDirectHandler(req,res);

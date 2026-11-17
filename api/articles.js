@@ -13,7 +13,7 @@ export default async function handler(req,res){
   if(req.method==='GET'){
    const list=req.query.scope==='admin'
       ?await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles ORDER BY publish_date DESC,updated_at DESC LIMIT 500`
-      :await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles WHERE status='published' ORDER BY publish_date DESC,updated_at DESC LIMIT 500`;
+      :await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_published_articles WHERE status='published' ORDER BY publish_date DESC,updated_at DESC LIMIT 500`;
    return res.status(200).json({articles:list.map(articleRow),editorial:await editorial()});
   }
   if(JSON.stringify(req.body||'').length>240000)return res.status(413).json({error:'المقالة تتجاوز الحد المسموح.'});
@@ -41,12 +41,12 @@ export default async function handler(req,res){
     const version=req.body.expectedVersion;
     if(typeof version!=='string'||Number.isNaN(Date.parse(version)))return res.status(400).json({error:'نسخة المقالة غير صالحة.'});
     const changed=await sql`UPDATE blog_articles SET slug=${a.slug},status=${a.status},publish_date=${a.publishDate}::date,
-      data=${data}::jsonb,updated_at=NOW() WHERE id=${id} AND updated_at=${version}::timestamptz RETURNING id`;
+      data=${data}::jsonb || CASE WHEN ${a.status}='published' AND NOT (${data}::jsonb ? 'scheduledAt') AND data ? 'scheduledAt' THEN jsonb_build_object('scheduledAt',data->'scheduledAt') ELSE '{}'::jsonb END,updated_at=NOW() WHERE id=${id} AND updated_at=${version}::timestamptz RETURNING id`;
     if(!changed.length)return res.status(409).json({error:'تغيّرت نسخة الخادم. نسخة عملك محفوظة على جهازك. راجع النسختين قبل النشر.'});
     return res.status(200).json({id});
    }
    await sql`INSERT INTO blog_articles(id,slug,status,publish_date,data) VALUES (${id},${a.slug},${a.status},${a.publishDate}::date,${data}::jsonb)
-   ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug,status=EXCLUDED.status,publish_date=EXCLUDED.publish_date,data=EXCLUDED.data,updated_at=NOW()`;
+   ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug,status=EXCLUDED.status,publish_date=EXCLUDED.publish_date,data=EXCLUDED.data || CASE WHEN EXCLUDED.status='published' AND NOT (EXCLUDED.data ? 'scheduledAt') AND blog_articles.data ? 'scheduledAt' THEN jsonb_build_object('scheduledAt',blog_articles.data->'scheduledAt') ELSE '{}'::jsonb END,updated_at=NOW()`;
    return res.status(200).json({id});
   }
   if(req.body.action==='delete'){
@@ -68,6 +68,7 @@ export default async function handler(req,res){
   }
   return res.status(400).json({error:'طلب غير معروف.'});
  }catch(e){
+  if(e?.code==='23514')return res.status(409).json({error:'أحد الملفات محجوز للحذف. اختر ملفًا آخر أو ارفع نسخة جديدة.'});
   if(e?.code==='23505')return res.status(409).json({error:'الرابط الوصفي مستخدم.'});
   if(/غير صالحة|مطلوبة|يجب|حقل/.test(e?.message||''))return res.status(400).json({error:e.message});
   console.error('Database error',e?.code||e?.name);

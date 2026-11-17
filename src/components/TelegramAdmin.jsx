@@ -6,9 +6,9 @@ export function TelegramAdmin(){
  async function action(type){
   setBusy(true);setMessage('');
   try{
-   const result=await api('/api/v1/telegram-pair',{method:'POST',body:JSON.stringify({action:type})});
+   const result=await api('/api/v1/telegram-pair',{method:'POST',body:JSON.stringify({action:type,...(type==='revoke'?{confirm:true}:{})})});
    if(type==='issue')setCode(result.command);
-   if(type==='configure')setMessage(result.message||'تم تفعيل البوت.');
+   if(type==='configure'||type==='verify')setMessage(result.message||'تم تفعيل البوت.');
    if(type==='revoke'){setCode('');setMessage('أُبطلت صلاحية حسابات تيليجرام المربوطة.');}
    setState(old=>({...old,...result}));
   }catch(e){setMessage(e.message||'تعذّر الاتصال.');}
@@ -21,8 +21,11 @@ export function TelegramAdmin(){
   {open&&<div className="space-y-4 mt-4">
    <p className="text-sm text-ink/70">اربط حسابك الخاص بالبوت برمز لمرة واحدة، ثم انشر المقالات وأدرها دون مشاركة كلمة المرور.</p>
    <p className="text-sm">{state?.configured?'✅ إعدادات اتصال البوت متوفرة.':'⚠️ أضف TELEGRAM_BOT_TOKEN في متغيرات Vercel للإنتاج ثم أعد النشر.'} {state?.linkedAccounts!=null?'· الحسابات المربوطة: '+state.linkedAccounts:''}</p>
+   {state?.bot&&<p>البوت @{state.bot.username} · المعرّف {state.bot.id}</p>}
+   {state?.webhook&&<p>{state.webhook.active?'عنوان Webhook صحيح':'عنوان استقبال الأوامر غير مضبوط'} · تحديثات بانتظار التسليم {state.webhook.pendingUpdates}{state.webhook.hasRecentError?' · توجد أخطاء استقبال حديثة':''}</p>}
    <div className="flex flex-wrap gap-2">
     <button disabled={busy} className="inline-flex gap-2 items-center rounded-xl bg-teal px-4 py-2 text-white text-sm font-bold" onClick={()=>action('configure')}><ShieldCheck size={16}/> تفعيل Webhook</button>
+    <button disabled={busy} onClick={()=>action('verify')} className="rounded-xl border px-4 py-2 text-sm">التحقق من حالة البوت</button>
     <button disabled={busy} className="inline-flex gap-2 items-center rounded-xl bg-gold/30 px-4 py-2 text-sm font-bold" onClick={()=>action('issue')}><Link2 size={16}/> إنشاء رمز ربط 10 دقائق</button>
    </div>
    {code&&<div className="rounded-xl bg-cream p-4 border border-gold/30">

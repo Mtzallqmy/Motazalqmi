@@ -7,12 +7,17 @@ try {
  const page=await browser.newPage({viewport:{width:393,height:852},reducedMotion:'reduce'});
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  const seed=JSON.parse(await readFile('android/app/src/main/assets/bootstrap.json','utf8'));
+ const future={...seed.articles[0],id:'scheduled-browser',slug:'scheduled-browser',title:'مقالة مستقبلية لا تظهر قبل موعدها',scheduledAt:'2027-12-01T10:00:00.000Z'};
+ seed.articles.push(future);
  let admin=false;
  await page.route('**/api/session',route=>route.fulfill({json:{user:admin?{email:'editor@example.invalid'}:null}}));
  await page.route('**/api/articles*',route=>route.fulfill({json:{articles:seed.articles,editorial:seed}}));
+ await page.route('**/api/v1/assets*',route=>route.fulfill({json:{items:[{url:'https://example123.public.blob.vercel-storage.com/media/test.pdf',pathname:'media/test.pdf',size:200}],pendingDeletions:[]}}));
+ await page.route('**/api/v1/media-delete',route=>route.fulfill({status:409,json:{error:'الملف مستخدم في المحتوى أو مراجعاته.',references:[{title:'مقالة تستخدم الملف'}]}}));
  await page.route('**/api/v1/authors',route=>route.fulfill({json:{authors:[]}}));
  await page.goto('http://localhost:4173');
  await page.locator('.lead-text h2 a').waitFor();
+ assert.equal(await page.getByText(future.title,{exact:true}).count(),0);
  assert(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth));
  await page.screenshot({path:'mobile-home.png',animations:'disabled'});
  await page.locator('.lead-text h2 a').click();
@@ -30,8 +35,12 @@ try {
  await page.setViewportSize({width:1440,height:900});await page.goto('http://localhost:4173');await page.locator('.lead-text').waitFor();
  await page.screenshot({path:'desktop-home.png',animations:'disabled'});
  admin=true;await page.goto('http://localhost:4173/admin?edit='+seed.articles[0].id);
- const body=page.locator('#article-content');await body.waitFor();await body.fill('نص اختبار محفوظ محليًا');
+ const body=page.locator('#article-content');await body.waitFor();await body.fill('نص اختبار محفوظ محليًا');await page.getByLabel('موعد النشر',{exact:true}).fill('2027-01-20T20:30');
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.reload();
- await body.waitFor();assert.equal(await body.inputValue(),'نص اختبار محفوظ محليًا');assert.deepEqual(errors,[]);
+ await body.waitFor();assert.equal(await body.inputValue(),'نص اختبار محفوظ محليًا');assert.equal(await page.getByLabel('موعد النشر',{exact:true}).inputValue(),'2027-01-20T20:30');
+ await page.locator('.studio-tools summary').click();await page.getByRole('button',{name:'عرض مكتبة الوسائط',exact:true}).click();
+ page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'حذف من المخزن',exact:true}).click();
+ await page.getByText(/الملف مستخدم في المحتوى/).waitFor();assert.equal(await page.getByRole('button',{name:'إدراج في النص',exact:true}).count(),1);
+ assert.deepEqual(errors,[]);
  console.log('PASS RTL mobile layout, desktop layout, reader preference reload and editor recovery after refresh');
 }finally{await browser.close();}

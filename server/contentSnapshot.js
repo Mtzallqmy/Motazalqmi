@@ -7,7 +7,7 @@ export { normalizeArabic };
 export async function publishedSnapshot(sql=database()) {
   // A single PostgreSQL statement sees one MVCC snapshot, including all article bodies.
   const rows=await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data
-    FROM blog_articles WHERE status='published'
+    FROM blog_published_articles WHERE status='published'
     ORDER BY publish_date DESC,id ASC LIMIT 10001`;
   if(rows.length>10000)throw new Error('Published catalogue exceeds sync limit');
   const articles=rows.map(row=>({...articleRow(row),updatedAt:row.updated_at}));

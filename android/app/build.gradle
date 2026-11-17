@@ -17,8 +17,8 @@ android {
   if (project.findProperty('motazArm64Only') == 'true') {
    ndk { abiFilters 'arm64-v8a' }
   }
-  versionCode 30200
-  versionName '3.2.0'
+  versionCode 30300
+  versionName '3.3.0'
   testInstrumentationRunner 'com.moataz.motazalqmi.OfflineAndroidJUnitRunner'
  }
  buildFeatures { compose true; buildConfig true }
@@ -45,7 +45,7 @@ android {
   }
   release {
    if (project.findProperty('motazIndependentEdition') == 'true') {
-    applicationIdSuffix '.edition3'
+    applicationIdSuffix '.edition33'
     versionNameSuffix '-independent'
    }
    ndk { abiFilters 'arm64-v8a' }
