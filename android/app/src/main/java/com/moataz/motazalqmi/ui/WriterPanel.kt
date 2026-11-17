@@ -45,9 +45,12 @@ data class WriterList(val articles:List<ArticleDto> = emptyList())
 data class MediaDirectRequest(val mime:String,val base64:String,val purpose:String)
 data class MediaDirectResponse(val url:String="")
 data class WriterAction(val action:String,val expectedVersion:String?=null,val article:ArticleDto?=null,val id:String?=null)
-data class WriterProfile(val id:String="",val name:String="",val image:String="")
+data class WriterProfile(val id:String="",val name:String="",val image:String="",val bio:String="",val link:String="")
 data class WriterProfiles(val authors:List<WriterProfile> = emptyList())
 interface WriterApi {
+ @GET("api/v1/assets") suspend fun media(@Header("Authorization") bearer:String,@Query("cursor") cursor:String?):WriterMediaLibrary
+ @POST("api/v1/media-delete") suspend fun removeMedia(@Header("Authorization") bearer:String,@Body value:MediaDeleteRequest)
+ @POST("api/v1/authors") suspend fun saveAuthor(@Header("Authorization") bearer:String,@Body value:AuthorChange):WriterAuthorResponse
  @GET("api/v1/authors") suspend fun authors():WriterProfiles
  @POST("api/v1/media-ticket") suspend fun ticket(@Header("Authorization") bearer:String,@Body value:TicketRequest):UploadTicket
  @retrofit2.http.Headers("x-api-version: 13","x-vercel-blob-access: public")
@@ -62,7 +65,7 @@ interface WriterApi {
 }
 
 data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val restoring:Boolean=true,val error:String="",
- val profiles:List<WriterProfile> = emptyList(),val progress:Int?=null,val articles:List<ArticleDto> = emptyList(),val editing:ArticleDto?=null,val editorOpen:Boolean=false)
+ val studio:String="articles",val notice:String="",val media:List<WriterMedia> = emptyList(),val mediaCursor:String?=null,val pendingMedia:List<WriterPendingMedia> = emptyList(),val profiles:List<WriterProfile> = emptyList(),val progress:Int?=null,val articles:List<ArticleDto> = emptyList(),val editing:ArticleDto?=null,val editorOpen:Boolean=false)
 
 @HiltViewModel class WriterViewModel @Inject constructor(
  private val api:WriterApi,private val secureSession:SecureWriterSession,
@@ -169,6 +172,55 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="فشل الحذف. تحقق من الاتصال والصلاحية.")}
   }
  }
+ fun selectStudio(value:String){
+  ui.value=ui.value.copy(studio=value,error="",notice="")
+  when(value){
+   "media"->loadMedia(null)
+   "authors"->viewModelScope.launch { try{ui.value=ui.value.copy(profiles=api.authors().authors)}catch(_:Exception){ui.value=ui.value.copy(error="تعذر تحميل الكتّاب")} }
+  }
+ }
+ private fun studioError(error:Exception,fallback:String):String =
+  if(error is retrofit2.HttpException)runCatching {
+   gson.fromJson(error.response()?.errorBody()?.string(),com.google.gson.JsonObject::class.java).get("error").asString
+  }.getOrDefault(fallback) else fallback
+ fun loadMedia(cursor:String?){
+  if(ui.value.busy)return
+  viewModelScope.launch {
+   ui.value=ui.value.copy(busy=true,error="")
+   try{
+    val page=api.media(credential(),cursor)
+    ui.value=ui.value.copy(media=if(cursor==null)page.items else (ui.value.media+page.items).distinctBy{it.url},
+      mediaCursor=page.cursor,pendingMedia=page.pendingDeletions)
+   }catch(e:kotlinx.coroutines.CancellationException){throw e}
+   catch(e:Exception){ui.value=ui.value.copy(error=studioError(e,"تعذر فتح مكتبة الوسائط"))}
+   finally{ui.value=ui.value.copy(busy=false)}
+  }
+ }
+ fun deleteMedia(url:String){
+  if(ui.value.busy)return
+  viewModelScope.launch {
+   ui.value=ui.value.copy(busy=true,error="",notice="")
+   try {
+    api.removeMedia(credential(),MediaDeleteRequest(url))
+    ui.value=ui.value.copy(media=ui.value.media.filter{it.url!=url},pendingMedia=ui.value.pendingMedia.filter{it.url!=url},notice="حُذف الملف من المخزن")
+   }catch(e:kotlinx.coroutines.CancellationException){throw e}
+   catch(e:Exception){ui.value=ui.value.copy(error=studioError(e,"تعذر الحذف. حدّث المكتبة وأعد المحاولة."))}
+   finally{ui.value=ui.value.copy(busy=false)}
+  }
+ }
+ fun saveProfile(value:AuthorChange,done:(WriterProfile)->Unit){
+  if(ui.value.busy)return
+  viewModelScope.launch {
+   ui.value=ui.value.copy(busy=true,error="",notice="")
+   try{
+    val profile=api.saveAuthor(credential(),value).author
+    ui.value=ui.value.copy(profiles=ui.value.profiles.filter{it.id!=profile.id}+profile,notice="حُفظ ملف الكاتب")
+    done(profile)
+   }catch(e:kotlinx.coroutines.CancellationException){throw e}
+   catch(e:Exception){ui.value=ui.value.copy(error=studioError(e,"تعذر حفظ ملف الكاتب"))}
+   finally{ui.value=ui.value.copy(busy=false)}
+  }
+ }
  fun logout(){secureSession.clear();token=null;expiresAt=0;ui.value=WriterUiState(restoring=false)}
  override fun onCleared(){token=null;super.onCleared()}
 }
@@ -183,10 +235,16 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    Text("لوحة الكاتب",style=MaterialTheme.typography.headlineMedium)
    TextButton(onClick=back){Text("عودة")}
   }
+  if(state.notice.isNotBlank())Text(state.notice,color=MaterialTheme.colorScheme.primary)
   if(state.error.isNotBlank())Text(state.error,color=MaterialTheme.colorScheme.error)
   state.progress?.let { Text("رفع الملف · $it٪"); TextButton(onClick=vm::cancelUpload){Text("إلغاء الرفع")} }
   if(state.busy)LinearProgressIndicator(Modifier.fillMaxWidth())
   if(state.restoring){ Text("جار استعادة جلسة الكاتب المحفوظة…"); return@Column }
+  if(state.authorized&&!state.editorOpen)Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)){
+   listOf("articles" to "المقالات","media" to "الوسائط","authors" to "الكتّاب").forEach{(id,label)->
+    FilterChip(state.studio==id,{vm.selectStudio(id)},{Text(label)})
+   }
+  }
   if(!state.authorized){
    Spacer(Modifier.height(20.dp))
    Text("إدارة مقالات Neon من التطبيق. بيانات الكاتب محمية، ولا تُحفظ كلمة المرور.")
@@ -196,7 +254,9 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    Button(onClick={vm.login(email,password,remember);password=""},enabled=!state.busy&&email.isNotBlank()&&password.isNotBlank()){Text("دخول الكاتب")}
   } else if(state.editorOpen){
    WriterEditor(state.editing,remember(state.editing?.id){vm.recovery(state.editing?.id)},vm::keepDraft,state.profiles,state.busy,vm::save,vm::closeEditor,vm::delete,vm::uploadMedia)
-  } else {
+  } else if(state.studio=="media"){NativeMediaLibrary(state,vm::loadMedia,vm::deleteMedia)}
+  else if(state.studio=="authors"){NativeAuthorManager(state,vm::saveProfile,vm::uploadMedia)}
+  else {
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
     Button(onClick={vm.edit(null)}){Text("مقال جديد")}
     TextButton(onClick=vm::reload){Text("تحديث")}
@@ -208,7 +268,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
      Card(onClick={vm.edit(a)},shape=RoundedCornerShape(16.dp)){
       Column(Modifier.fillMaxWidth().padding(16.dp)){
        Text(a.title,style=MaterialTheme.typography.titleMedium)
-       Text((if(a.status=="published")"منشور" else "مسودة")+" • "+a.category)
+       Text((if(articleIsScheduled(a))"مجدول إلى "+scheduleToLocal(a.scheduledAt) else if(a.status=="published")"منشور" else "مسودة")+" • "+a.category)
        Text("اضغط لتعديل المقال",style=MaterialTheme.typography.bodySmall)
       }
      }
@@ -224,6 +284,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  var author by rememberSaveable(initial?.id){mutableStateOf(initial?.author?:"معتز العلقمي")}
  var authorImage by rememberSaveable(initial?.id){mutableStateOf(initial?.authorImage.orEmpty())}
  var slug by rememberSaveable(initial?.id){mutableStateOf(initial?.slug.orEmpty())}
+ var scheduleLocal by rememberSaveable(initial?.id){mutableStateOf(scheduleToLocal(initial?.scheduledAt.orEmpty()))}
  var category by rememberSaveable(initial?.id){mutableStateOf(initial?.category?:"general")}
  var excerpt by rememberSaveable(initial?.id){mutableStateOf(initial?.excerpt.orEmpty())}
  var readTime by rememberSaveable(initial?.id){mutableStateOf(initial?.readTime?:"5 دقائق")}
@@ -278,6 +339,8 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
     modifier=Modifier.size(70.dp).clip(androidx.compose.foundation.shape.CircleShape),
     contentScale=androidx.compose.ui.layout.ContentScale.Crop)
   }
+  OutlinedTextField(scheduleLocal,{scheduleLocal=it.take(30)},label={Text("موعد النشر yyyy-MM-dd HH:mm")},placeholder={Text("2027-01-20 20:30")},modifier=Modifier.fillMaxWidth())
+  Text("التوقيت: "+java.time.ZoneId.systemDefault().id+". اترك الموعد فارغًا للنشر الفوري.",style=MaterialTheme.typography.bodySmall)
   OutlinedTextField(slug,{slug=it.take(150)},label={Text("الرابط الوصفي")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(category,{category=it.take(60)},label={Text("معرّف القسم")},modifier=Modifier.fillMaxWidth())
   OutlinedTextField(cover,{cover=it.take(2048)},label={Text("رابط صورة الغلاف HTTPS")},modifier=Modifier.fillMaxWidth())
@@ -332,24 +395,26 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   Row(verticalAlignment=Alignment.CenterVertically){
    Text("مقال مميّز",Modifier.weight(1f));Switch(featured,onCheckedChange={featured=it})
   }
-  val valid=title.isNotBlank()&&content.isNotBlank()&&(cover.isBlank()||cover.startsWith("https://"))&&(authorImage.isBlank()||authorImage.startsWith("https://"))
+  val scheduleValid=runCatching{scheduleFromLocal(scheduleLocal)}.isSuccess
+  if(!scheduleValid)Text("اكتب موعدًا صحيحًا مثل 2027-01-20 20:30",color=MaterialTheme.colorScheme.error)
+  val valid=scheduleValid&&title.isNotBlank()&&content.isNotBlank()&&(cover.isBlank()||cover.startsWith("https://"))&&(authorImage.isBlank()||authorImage.startsWith("https://"))
   fun prepared(status:String):ArticleDto{
    val articleSlug=slug.ifBlank{ "article-"+System.currentTimeMillis() }
    return (initial?:ArticleDto()).copy(title=title.trim(),slug=articleSlug,category=category,
-    content=content,excerpt=excerpt,coverImage=cover,readTime=readTime,featured=featured,status=status,
+    content=content,excerpt=excerpt,coverImage=cover,readTime=readTime,featured=featured,status=status,scheduledAt=runCatching{scheduleFromLocal(scheduleLocal)}.getOrDefault(""),
     author=author.trim(),authorId=selectedAuthor,authorImage=authorImage.trim(),
     publishDate=original?.publishDate?.takeIf{it.isNotBlank()} ?: java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US).format(java.util.Date()),
     tags=tags.split('،',',').map{it.trim()}.filter{it.isNotBlank()},fontFamily=fontFamily,fontSize=fontSize)
   }
-  LaunchedEffect(title,author,selectedAuthor,authorImage,slug,category,excerpt,readTime,content,cover,tags,featured,fontFamily,fontSize){
+  LaunchedEffect(scheduleLocal,title,author,selectedAuthor,authorImage,slug,category,excerpt,readTime,content,cover,tags,featured,fontFamily,fontSize){
    if(title.isNotBlank() || content.isNotBlank() || original!=null || recovered!=null)keep(original?.id,prepared("draft").copy(slug=slug))
   }
   Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-   Button(onClick={confirmPublish=true},enabled=valid&&!busy){Text("نشر")}
+   Button(onClick={confirmPublish=true},enabled=valid&&!busy){Text(if(scheduleLocal.isBlank())"نشر" else "جدولة")}
    OutlinedButton(onClick={save(prepared("draft"))},enabled=valid&&!busy){Text("مسودة")}
    TextButton(onClick=cancel){Text("إلغاء")}
   }
-  if(confirmPublish)AlertDialog(onDismissRequest={confirmPublish=false},title={Text("نشر المقالة للقراء؟")},
+  if(confirmPublish)AlertDialog(onDismissRequest={confirmPublish=false},title={Text(if(scheduleLocal.isBlank())"نشر المقالة للقراء؟" else "جدولة المقالة حسب الموعد؟")},
    text={Text(title)},confirmButton={TextButton(onClick={confirmPublish=false;save(prepared("published"))}){Text("تأكيد النشر")}},
    dismissButton={TextButton(onClick={confirmPublish=false}){Text("إلغاء")}})
   if(original!=null)TextButton(onClick={confirm=true},enabled=!busy){Text("حذف المقال",color=MaterialTheme.colorScheme.error)}

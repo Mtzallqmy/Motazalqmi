@@ -13,3 +13,9 @@
 -keep class com.moataz.motazalqmi.ui.MediaDirect* { *; }
 -keep class com.moataz.motazalqmi.ui.TicketRequest { *; }
 -keep class com.moataz.motazalqmi.ui.UploadTicket { *; }
+
+-keep class com.moataz.motazalqmi.ui.WriterMedia* { *; }
+-keep class com.moataz.motazalqmi.ui.WriterPendingMedia { *; }
+-keep class com.moataz.motazalqmi.ui.MediaDeleteRequest { *; }
+-keep class com.moataz.motazalqmi.ui.AuthorChange { *; }
+-keep class com.moataz.motazalqmi.ui.WriterAuthorResponse { *; }

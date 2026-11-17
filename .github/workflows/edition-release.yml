@@ -1,8 +1,8 @@
-name: Motaz 3.2 verified release
+name: Motaz 3.3 verified release
 on:
   push:
-    branches: [main, feat/motazalqami-creative-release]
-    paths: ['android/**', 'src/**', 'server/**', 'shared/**', '.github/workflows/edition-release.yml']
+    branches: [main, feat/motazalqami-complete-editorial-33]
+    paths: ['android/**', 'src/**', 'server/**', 'shared/**', 'tests/**', 'package*.json', '.github/workflows/edition-release.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: web-3.2-verification
+          name: web-3.3-verification
           path: |
             mobile-home.png
             desktop-home.png
@@ -70,7 +70,7 @@ jobs:
             test "$digest" = "$original"
           else
             abi+=(-PmotazIndependentEdition=true)
-            pkg="$pkg.edition3"
+            pkg="$pkg.edition33"
             export ANDROID_KEYSTORE_PASSWORD="$(openssl rand -hex 32)"
             export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
             export ANDROID_KEY_ALIAS=edition3
@@ -81,12 +81,12 @@ jobs:
             tar -C "$RUNNER_TEMP" -cf - release.jks password.txt key-password.txt alias.txt | openssl cms -encrypt -aes-256-cbc -binary -outform DER -out dist/edition3-recovery.cms android/release/recovery-certificate.pem
           fi
           bash android/gradlew -p android :app:testDebugUnitTest :app:lintDebug :app:assembleRelease "${abi[@]}" --no-daemon
-          apk="dist/Motazalqmi-3.2.0-${pkg##*.}-ARM64.apk"
+          apk="dist/Motazalqmi-3.3.0-${pkg##*.}-ARM64.apk"
           cp android/app/build/outputs/apk/release/app-release.apk "$apk"
           "$sdk/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$apk" > dist/signature.txt
           "$sdk/zipalign" -c 4 "$apk"
           "$sdk/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging"
-          grep -F "package: name='$pkg' versionCode='30200'" "$RUNNER_TEMP/badging"
+          grep -F "package: name='$pkg' versionCode='30300'" "$RUNNER_TEMP/badging"
           grep -Fx "sdkVersion:'26'" "$RUNNER_TEMP/badging"
           grep -Fx "native-code: 'arm64-v8a'" "$RUNNER_TEMP/badging"
           unzip -tq "$apk"
@@ -97,7 +97,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: native-3.2-quality
+          name: native-3.3-quality
           path: android/app/build/reports/
       - name: Remove private signing material
         if: always()
@@ -124,7 +124,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: device-3.2-API-${{ matrix.api }}
+          name: device-3.3-API-${{ matrix.api }}
           path: |
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
@@ -169,15 +169,15 @@ jobs:
           cd dist
           sha256sum -c SHA256SUMS
           if [ "$(cat package.txt)" = com.moataz.motazalqmi ]; then
-            tag=v3.2.0
+            tag=v3.3.0
             note='تحديث رسمي موقّع بشهادة الإصدار 2.0.0.'
             flags=()
           else
-            tag=v3.2.0-independent.1
-            note='نسخة مستقلة باسم com.moataz.motazalqmi.edition3 تثبت بجانب النسخ السابقة. محفوظات كل نسخة خاصة بها.'
+            tag=v3.3.0-independent.1
+            note='نسخة مستقلة باسم com.moataz.motazalqmi.edition33 تثبت بجانب النسخ السابقة. محفوظات كل نسخة خاصة بها.'
             flags=(--prerelease)
           fi
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
           printf '%s\n\n' "$note" > RELEASE-NOTES.md
           printf '%s\n' 'Android 8+ · ARM64 · Release optimized' 'واجهة مجلة ثقافية، صور الكتّاب، فهرس تفاعلي، تخصيص القراءة من داخل النص، تشغيل صوتي، بحث حسب الأبواب، ومكتبة محفوظات.' 'الموقع ولوحة الكاتب والمزامنة تستخدم المستودع الرئيسي. تحقق الملف بشهادة Android وzipalign وSHA256. اختبارات الواجهة على API 26 و28 و29 واختبار تشغيل الملف الموقّع على API35 مع ترجمة ARM.' 'التوقيع المستقل يثبّت تطبيقًا بجانب الإصدارات السابقة، وتبقى محفوظاتها داخلها. احتفظ بها أثناء الانتقال.' >> RELEASE-NOTES.md
-          gh release create "$tag" * -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" --title 'مدونة معتز العلقمي 3.2 — رحاب القراءة' --notes-file RELEASE-NOTES.md
+          gh release create "$tag" * -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" --title 'مدونة معتز العلقمي 3.3 — رحاب القراءة' --notes-file RELEASE-NOTES.md
