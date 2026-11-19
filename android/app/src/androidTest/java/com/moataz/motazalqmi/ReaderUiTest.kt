@@ -78,4 +78,15 @@ class ReaderUiTest {
   capture("reader-tools")
  }
 
+ @Test fun magazineMenuOpensWebsiteSectionsAndWriter() {
+  rule.waitUntil(20000) { rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty() }
+  rule.onNodeWithContentDescription("القائمة").performClick()
+  rule.onNodeWithTag("magazine-menu").performScrollToNode(hasText("من بطون الكتب"))
+  rule.onNode(hasText("من بطون الكتب") and hasAnyAncestor(hasTestTag("magazine-menu"))).performClick()
+  rule.onNodeWithText("مادة منشورة", substring = true).assertIsDisplayed()
+  capture("magazine-section")
+  rule.onNodeWithContentDescription("لوحة الكاتب").performClick()
+  rule.onNodeWithText("البريد الإداري").assertIsDisplayed()
+ }
+
 }

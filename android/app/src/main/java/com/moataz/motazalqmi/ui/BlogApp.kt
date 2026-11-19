@@ -77,46 +77,69 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
    handled = true; nav.navigate("article/${Uri.encode(it.id)}")
   }
  }
- Scaffold(snackbarHost = { SnackbarHost(snackbar) }, bottomBar = {
-  if (!route.startsWith("article") && route != "writer") NavigationBar {
-   tabs.forEachIndexed { index, (path, title) -> NavigationBarItem(selected = route == path,
-    onClick = { nav.navigate(path) { popUpTo("home") { saveState = true }; launchSingleTop = true; restoreState = true } },
-    icon = { Icon(listOf(Icons.Default.Home, Icons.Default.Search, Icons.Default.Bookmarks, Icons.Default.Settings)[index], title) }, label = { Text(title) }) }
-  }
- }) { padding ->
-  NavHost(navController = nav, startDestination = "home", modifier = Modifier.padding(padding),
-   enterTransition = { fadeIn() }, exitTransition = { fadeOut() }) {
-   composable("home") { Home(library, settings, busy, vm::sync, { nav.navigate("article/${Uri.encode(it)}") }, { nav.navigate("section/${Uri.encode(it)}") }) }
-   composable("section/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
-    val id = entry.arguments?.getString("id").orEmpty()
-    when (id) {
-     "about" -> About(library.about)
-     "quotes" -> Quotes(library, settings, vm::save) { nav.navigate("article/${Uri.encode(it)}") }
-     else -> ArticleList(library.articles.filter { it.id in library.available && it.category == id }, settings,
-      library.sections.find { it.id == id }?.title ?: "المقالات", { nav.navigate("article/${Uri.encode(it)}") })
+ var menuOpen by rememberSaveable { mutableStateOf(false) }
+ val openArticle: (String) -> Unit = { nav.navigate("article/${Uri.encode(it)}") { launchSingleTop = true } }
+ val openSection: (String) -> Unit = { nav.navigate("section/${Uri.encode(it)}") { launchSingleTop = true } }
+ val openWriter: () -> Unit = { nav.navigate("writer") { launchSingleTop = true } }
+ fun openTab(path: String) {
+  nav.navigate(path) { popUpTo("home") { saveState = true }; launchSingleTop = true; restoreState = true }
+ }
+ val actions = remember(library.states, vm) { ArticleActions(library.states, vm::save) }
+ CompositionLocalProvider(LocalArticleActions provides actions) {
+  Scaffold(snackbarHost = { SnackbarHost(snackbar) }, topBar = {
+   if (!route.startsWith("article") && route != "writer") {
+    MagazineHeader({ openTab("home") }, { openTab("search") }, { openTab("saved") }, openWriter, { menuOpen = true })
+   }
+  }, bottomBar = {
+   if (!route.startsWith("article") && route != "writer") NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+    val icons = listOf(R.drawable.blog_house, R.drawable.blog_search, R.drawable.blog_bookmark, R.drawable.blog_settings)
+    tabs.forEachIndexed { index, (path, title) ->
+     NavigationBarItem(selected = route == path, onClick = { openTab(path) },
+      icon = { MagazineIcon(icons[index]) }, label = { Text(title) })
     }
    }
-   composable("search") { Search(library, settings) { nav.navigate("article/${Uri.encode(it)}") } }
-   composable("saved") { Saved(library, settings, vm::save) { nav.navigate("article/${Uri.encode(it)}") } }
-   composable("settings") { SettingsPage(settings, library.syncedAt, busy, vm::configure, vm::sync, vm::clean, { nav.navigate("section/about") }, { nav.navigate("writer") }) }
-   composable("writer") { val writer = androidx.hilt.navigation.compose.hiltViewModel<WriterViewModel>(); WriterPanel(writer) { nav.popBackStack() } }
-   composable("article/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
-    val id = entry.arguments?.getString("id").orEmpty()
-    val article = library.articles.find { it.id == id }
-    if (article == null) Empty("هذا المقال غير متاح محليًا")
-    else Reader(article, library, settings, vm, { nav.popBackStack() }, { nav.navigate("article/${Uri.encode(it)}") })
+  }) { padding ->
+   NavHost(navController = nav, startDestination = "home", modifier = Modifier.padding(padding),
+    enterTransition = { fadeIn() }, exitTransition = { fadeOut() }) {
+    composable("home") { EditorialHome(library, settings, busy, vm::sync, openArticle, openSection, openWriter) }
+    composable("section/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+     val id = entry.arguments?.getString("id").orEmpty()
+     if (id == "about") MagazineAbout(library, openWriter)
+     else MagazineSection(id, library, settings, openSection, openArticle, vm::save)
+    }
+    composable("search") { Search(library, settings, openArticle) }
+    composable("saved") { Saved(library, settings, vm::save, openArticle) }
+    composable("settings") { SettingsPage(settings, library.syncedAt, busy, vm::configure, vm::sync, vm::clean, { openSection("about") }, openWriter) }
+    composable("writer") {
+     val writer = androidx.hilt.navigation.compose.hiltViewModel<WriterViewModel>()
+     WriterPanel(writer) { nav.popBackStack() }
+    }
+    composable("author/{key}", arguments = listOf(navArgument("key") { type = NavType.StringType })) { entry ->
+     MagazineAuthor(entry.arguments?.getString("key").orEmpty(), library, settings, openArticle)
+    }
+    composable("article/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+     val article = library.articles.find { it.id == entry.arguments?.getString("id") }
+     if (article == null) Empty("هذا المقال غير متاح محليًا")
+     else Reader(article, library, settings, vm, { nav.popBackStack() }, openArticle, openSection,
+      { nav.navigate("author/${Uri.encode(it)}") { launchSingleTop = true } })
+    }
    }
   }
+  if (menuOpen) MagazineMenu(library, back?.arguments?.getString("id")?.let { "section/$it" } ?: route, navigate = { path ->
+   menuOpen = false
+   if (path.startsWith("section/")) openSection(path.substringAfter('/'))
+   else if (path == "writer") openWriter()
+   else openTab(path)
+  }, dismiss = { menuOpen = false })
  }
 }
 @Composable private fun Title(text: String) { Text(text, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(vertical = 12.dp)) }
-@Composable private fun Empty(text: String = "لم يُنشر محتوى في هذا القسم بعد") {
+@Composable internal fun Empty(text: String = "لم يُنشر محتوى في هذا القسم بعد") {
  Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
   Icon(Icons.Default.MenuBook, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.secondary)
   Text(text, Modifier.padding(top = 16.dp), style = MaterialTheme.typography.bodyLarge)
  }
 }
-@Composable private fun Home(library: Library, settings: ReadingSettings, busy: Boolean, sync: () -> Unit, open: (String) -> Unit, section: (String) -> Unit) { EditorialHome(library, settings, busy, sync, open, section) }
 @Composable private fun ArticleCard(a: ArticleDto, settings: ReadingSettings, open: (String) -> Unit) { EditorialArticleCard(a, settings, open) }
 @Composable internal fun Cover(url: String, settings: ReadingSettings) {
  val context = LocalContext.current
@@ -139,18 +162,18 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
 @Composable private fun Search(library: Library, settings: ReadingSettings, open: (String) -> Unit) {
  var query by rememberSaveable { mutableStateOf("") }
  var category by rememberSaveable { mutableStateOf("") }
- var oldest by rememberSaveable { mutableStateOf(false) }
+ var order by rememberSaveable { mutableStateOf("recent") }
  var results by remember { mutableStateOf(emptyList<ArticleDto>()) }
- LaunchedEffect(query, category, oldest, library) {
+ LaunchedEffect(query, category, order, library.articles, library.available, library.sections) {
   kotlinx.coroutines.delay(180)
   results = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
    val found = library.articles.filter { a -> a.id in library.available && (category.isEmpty() || a.category == category) &&
-    ArabicSearch.matches(query, a.title, a.content, a.author, a.tags.joinToString(" "), library.sections.find { it.id == a.category }?.title.orEmpty()) }
-   if(oldest)found.sortedBy { it.publishDate } else found.sortedByDescending { it.publishDate }
+    ArabicSearch.matches(query, a.title, a.content, a.excerpt, a.author, a.tags.joinToString(" "), library.sections.find { it.id == a.category }?.title.orEmpty()) }
+   orderArticles(found, order)
   }
  }
  Column(Modifier.fillMaxSize()) {
-  Text("اكتشف نصّك القادم",Modifier.padding(horizontal=20.dp,vertical=16.dp),style=MaterialTheme.typography.headlineMedium)
+  Text("البحث في المدونة",Modifier.padding(horizontal=20.dp,vertical=16.dp),style=MaterialTheme.typography.headlineMedium)
   OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal=20.dp),
    label = { Text("كلمة، عنوان، أو اسم كاتب") }, singleLine = true,
    trailingIcon = { if(query.isNotEmpty())IconButton(onClick={query=""}){Icon(Icons.Default.Close,"مسح البحث")} })
@@ -160,22 +183,15 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
     FilterChip(category==item.id,{category=item.id},{Text(item.title)})
    }
   }
-  TextButton(onClick={oldest=!oldest},modifier=Modifier.padding(horizontal=12.dp)) { Text(if(oldest)"الأقدم أولًا ↓" else "الأحدث أولًا ↓") }
+  ArticleOrder(order) { order = it }
   Box(Modifier.weight(1f)) { ArticleList(results, settings, "${results.size} من النتائج", open) }
  }
 }
-@Composable private fun Quotes(library: Library, settings: ReadingSettings, save: (String) -> Unit, open: (String) -> Unit) {
- LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-  item { Title("اقتباسات") }; if (library.quotes.isEmpty()) item { Empty() }
-  items(library.quotes, key = { quoteId(it) }) { QuoteCard(it, library.states[quoteId(it)]?.saved == true, { save(quoteId(it)) }) }
-  items(library.articles.filter { it.id in library.available && it.category == "quotes" }, key = { it.id }) { ArticleCard(it, settings, open) }
- }
-}
-@Composable private fun QuoteCard(q: QuoteDto, saved: Boolean, save: () -> Unit, interactive: Boolean = true) {
+@Composable internal fun QuoteCard(q: QuoteDto, saved: Boolean, save: () -> Unit, interactive: Boolean = true) {
  val clipboard = LocalClipboardManager.current; val context = LocalContext.current
  Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
   Column(Modifier.padding(24.dp)) {
-   Icon(Icons.Default.FormatQuote, null, tint = MaterialTheme.colorScheme.primary)
+   MagazineIcon(R.drawable.blog_quote)
    SelectionContainer { Text(q.text, Modifier.padding(vertical = 16.dp), fontFamily = Amiri, fontSize = 25.sp, lineHeight = 43.sp) }
    Text(q.author + " · " + q.source, fontFamily = Plex)
    if (interactive) Row {
@@ -188,24 +204,30 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
 }
 @Composable private fun Saved(library: Library, settings: ReadingSettings, save: (String) -> Unit, open: (String) -> Unit) {
  var filter by rememberSaveable { mutableStateOf(0) }
- val articles = library.articles.filter { a -> val s = library.states[a.id]; when (filter) { 0 -> s?.saved == true; 1 -> (s?.openedAt ?: 0) > 0; else -> (s?.openedAt ?: 0) > 0 && (s?.progress ?: 0f) < .98f } }.sortedByDescending { library.states[it.id]?.openedAt ?: 0L }
+ var query by rememberSaveable { mutableStateOf("") }
+ val articles = library.articles.filter { a -> val s = library.states[a.id]; when (filter) { 0 -> s?.saved == true; 1 -> (s?.openedAt ?: 0) > 0; else -> (s?.openedAt ?: 0) > 0 && (s?.progress ?: 0f) < .98f } }.filter { ArabicSearch.matches(query, it.title, it.author) }.sortedByDescending { library.states[it.id]?.openedAt ?: 0L }
  Column(Modifier.fillMaxSize()) {
+  Column(Modifier.padding(horizontal = 18.dp)) {
+   Text("مكتبتك", style = MaterialTheme.typography.headlineMedium)
+   OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
+    label = { Text("بحث في المحفوظات") }, leadingIcon = { MagazineIcon(R.drawable.blog_search) })
+  }
   Row(Modifier.horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
    listOf("المحفوظات", "سجل القراءة", "أكمل القراءة").forEachIndexed { i, label -> FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(label) }) }
   }
   LazyColumn(modifier = Modifier.testTag("saved-feed"), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
    if (articles.isEmpty()) item { Empty("لا توجد مقالات هنا بعد") }
    items(articles, key = { it.id }) { ArticleCard(it, settings, open) }
-   if (filter == 0) items(library.quotes.filter { library.states[quoteId(it)]?.saved == true }, key = { quoteId(it) }) { q -> QuoteCard(q, true, { save(quoteId(q)) }) }
+   if (filter == 0) items(library.quotes.filter { library.states[quoteId(it)]?.saved == true && ArabicSearch.matches(query, it.text, it.author) }, key = { quoteId(it) }) { q -> QuoteCard(q, true, { save(quoteId(q)) }) }
   }
  }
 }
-private fun share(context: android.content.Context, text: String) {
+internal fun share(context: android.content.Context, text: String) {
  context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "مشاركة"))
 }
 
 @OptIn(FlowPreview::class)
-@Composable private fun Reader(a: ArticleDto, library: Library, settings: ReadingSettings, vm: BlogViewModel, back: () -> Unit, open: (String) -> Unit) {
+@Composable private fun Reader(a: ArticleDto, library: Library, settings: ReadingSettings, vm: BlogViewModel, back: () -> Unit, open: (String) -> Unit, section: (String) -> Unit, author: (String) -> Unit) {
  val context = LocalContext.current
  val state = library.states[a.id]
  val scroll = rememberScrollState(state?.offset ?: 0)
@@ -218,7 +240,7 @@ private fun share(context: android.content.Context, text: String) {
  val scope = rememberCoroutineScope()
  var showIndex by rememberSaveable(a.id) { mutableStateOf(false) }
  var showSettings by rememberSaveable(a.id) { mutableStateOf(false) }
- var showAuthor by rememberSaveable(a.id) { mutableStateOf(false) }
+ val profile = library.authors.firstOrNull { it.id == a.authorId }
  var rendered by remember(a.content) { mutableStateOf<android.text.Spanned?>(null) }
  LaunchedEffect(a.content) {
   rendered = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { engine.renderer.render(engine.renderer.parse(a.content)) }
@@ -241,10 +263,10 @@ private fun share(context: android.content.Context, text: String) {
    TopAppBar(title = { Text("رحاب القراءة", fontFamily = Amiri) }, navigationIcon = {
     IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
    }, actions = {
-    if (headings.isNotEmpty()) IconButton(onClick = { showIndex = true }) { Icon(Icons.Default.Toc, "فهرس المقالة") }
-    IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Tune, "إعدادات القراءة") }
+    if (headings.isNotEmpty()) IconButton(onClick = { showIndex = true }) { MagazineIcon(R.drawable.blog_list, "فهرس المقالة") }
+    IconButton(onClick = { showSettings = true }) { MagazineIcon(R.drawable.blog_sliders_horizontal, "إعدادات القراءة") }
     IconButton(onClick = { vm.save(a.id) }) { Icon(if (state?.saved == true) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "حفظ للقراءة لاحقًا") }
-    IconButton(onClick = { share(context, a.title + "\nhttps://motazalqmi.vercel.app/articles/" + Uri.encode(a.slug)) }) { Icon(Icons.Default.Share, "مشاركة المقال") }
+    IconButton(onClick = { share(context, a.title + "\nhttps://motazalqmi.vercel.app/articles/" + Uri.encode(a.slug)) }) { MagazineIcon(R.drawable.blog_share2, "مشاركة المقال") }
    })
   }
   LinearProgressIndicator(progress = { if (scroll.maxValue > 0 && scroll.maxValue < Int.MAX_VALUE) scroll.value.toFloat() / scroll.maxValue else 0f }, modifier = Modifier.fillMaxWidth())
@@ -258,13 +280,20 @@ private fun share(context: android.content.Context, text: String) {
   }
   Column(Modifier.weight(1f).verticalScroll(scroll).padding(horizontal = 24.dp, vertical = 16.dp)) {
    if (a.id !in library.available) Text("نسخة محفوظة؛ هذا المقال لم يعد منشورًا على الموقع.", color = MaterialTheme.colorScheme.secondary)
-   Text(library.sections.find { it.id == a.category }?.title ?: "", color = MaterialTheme.colorScheme.secondary)
+   TextButton(onClick = { section(a.category) }) { MagazineIcon(sectionIcon(a.category)); Spacer(Modifier.width(7.dp)); Text(library.sections.find { it.id == a.category }?.title.orEmpty()) }
    Text(a.title, Modifier.padding(vertical = 18.dp), fontFamily = Amiri, fontSize = 32.sp, lineHeight = 48.sp)
    val minutes = (a.content.split(Regex("\\s+")).size / 180).coerceAtLeast(1)
-   Box(Modifier.clickable(enabled=a.author.isNotBlank()){showAuthor=true}.padding(vertical=6.dp)) {
-    AuthorIdentity(a.author,a.authorImage,"${a.publishDate} · $minutes دقائق قراءة")
+   Box(Modifier.clickable(enabled = a.author.isNotBlank() || a.authorId.isNotBlank()) {
+    author(a.authorId.ifBlank { a.author })
+   }.padding(vertical = 6.dp)) {
+    AuthorIdentity(profile?.name ?: a.author, profile?.image?.takeIf { it.isNotBlank() } ?: a.authorImage, "${a.publishDate} · $minutes دقائق قراءة")
    }
-   Spacer(Modifier.height(20.dp)); Cover(a.coverImage, settings); Spacer(Modifier.height(22.dp))
+   Spacer(Modifier.height(14.dp)); Cover(a.coverImage, settings)
+   if (a.excerpt.isNotBlank()) Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+    Text(a.excerpt, Modifier.padding(16.dp), fontFamily = Naskh, fontSize = 21.sp, lineHeight = 36.sp)
+   }
+   if (!focus) ArticleActionsRow(a)
+   Spacer(Modifier.height(14.dp))
    if (rendered == null) CircularProgressIndicator()
    // Render image blocks at the exact position they appear in the article.
    // The original TextView-only Markwon renderer silently omitted Markdown image bytes.
@@ -310,7 +339,18 @@ private fun share(context: android.content.Context, text: String) {
    }
    }
    Spacer(Modifier.height(30.dp))
-   val published = library.articles.filter { it.id in library.available }; val index = published.indexOfFirst { it.id == a.id }
+   val published = library.articles.filter { it.id in library.available }
+   val candidates = published.filter { it.id != a.id }
+   val related = candidates.filter { it.category == a.category || it.tags.any(a.tags::contains) }.ifEmpty { candidates }.take(2)
+   if (!focus && related.isNotEmpty()) {
+    Text("مقالات أخرى قد تروق لك", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(vertical = 12.dp))
+    related.forEach { entry ->
+     OutlinedCard(onClick = { open(entry.id) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+      Text(entry.title, Modifier.padding(14.dp), fontFamily = Amiri, fontSize = 21.sp)
+     }
+    }
+   }
+   val index = published.indexOfFirst { it.id == a.id }
    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
     published.getOrNull(index - 1)?.let { TextButton(onClick = { open(it.id) }) { Text("المقال السابق") } }
     if (index >= 0) published.getOrNull(index + 1)?.let { TextButton(onClick = { open(it.id) }) { Text("المقال التالي") } }
@@ -326,12 +366,7 @@ private fun share(context: android.content.Context, text: String) {
     scope.launch { scroll.animateScrollTo((offsets[index] ?: 0).coerceIn(0, scroll.maxValue)) }
    }) { Text(title) } }
   } }, confirmButton = { TextButton(onClick = { showIndex = false }) { Text("إغلاق") } })
- if (showAuthor) AlertDialog(onDismissRequest = { showAuthor = false }, title = { Text("كتابات "+a.author) },
-  text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-   library.articles.filter { it.id in library.available && (if(a.authorId.isNotBlank())it.authorId==a.authorId else it.author==a.author) }.forEach { entry ->
-    TextButton(onClick = { showAuthor = false; open(entry.id) }) { Text(entry.title) }
-   }
-  } }, confirmButton = { TextButton(onClick = { showAuthor = false }) { Text("إغلاق") } })
+
 }
 private object MaterialColors { val link = android.graphics.Color.rgb(104, 142, 113) }
 @Composable private fun SettingsPage(settings: ReadingSettings, syncedAt: Long, busy: Boolean, change: (ReadingSettings) -> Unit, sync: () -> Unit, clean: () -> Unit, about: () -> Unit, writer: () -> Unit) {
@@ -355,21 +390,10 @@ private object MaterialColors { val link = android.graphics.Color.rgb(104, 142, 
   OutlinedButton({ confirm = true }) { Text("تنظيف المحتوى غير المحفوظ والصور المؤقتة") }
   TextButton(about) { Text("حول المدونة والتطبيق") }
   OutlinedButton(onClick = writer) { Icon(Icons.Default.Edit, null); Text("لوحة الكاتب — المقالات والكتّاب والوسائط") }
-  Text("الجديد في تجربة 3.3: جدولة النشر، إدارة الكتّاب وصورهم، ومكتبة وسائط بحذف آمن؛ مع أدوات القراءة والمحفوظات دون اتصال.")
+  Text("الجديد في تجربة 3.4: أبواب المجلة، ملفات الكتّاب، وفهرس الكتابات والمحفوظات بتصميم متناسق مع الموقع.")
   Text("الإصدار ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) • Android 8+")
   Title("سياسة الخصوصية")
   Text("تُحفظ المحفوظات وسجل القراءة والإعدادات على جهازك. لا يطلب التطبيق جهات الاتصال أو الموقع. تُرسل طلبات قراءة المحتوى إلى الموقع الرسمي عبر HTTPS، وقد تحتفظ الاستضافة بسجلات الاتصال المعتادة. تُحمّل أغلفة المقالات من روابطها الخارجية وفق إعداد Wi-Fi. لا يضم التطبيق أدوات إعلانات أو تحليلات. لوحة الكاتب تتطلب مصادقة مستقلة وآمنة.", lineHeight = 28.sp)
  }
  if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("تنظيف التخزين المحلي؟") }, text = { Text("ستبقى المقالات المحفوظة والإعدادات وسجل القراءة. يمكن جلب بقية المقالات بالمزامنة مجددًا.") }, confirmButton = { TextButton({ clean(); confirm = false }) { Text("تنظيف") } }, dismissButton = { TextButton({ confirm = false }) { Text("إلغاء") } })
-}
-@Composable private fun About(about: String) {
- Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-  Icon(Icons.Default.AutoStories, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.secondary)
-  Title("مدونة معتز العلقمي")
-  Text(about.replace("\\n", "\n"), fontFamily = Naskh, fontSize = 23.sp, lineHeight = 42.sp)
-  HorizontalDivider()
-  Text("برمجة وتطوير: معتز العلقمي — تعز — اليمن — 2026م", fontFamily = Amiri, fontSize = 23.sp)
-  Text("Motaz Alalqami • ${BuildConfig.VERSION_NAME}")
-  Text("الخطوط: Amiri، Noto Naskh Arabic، IBM Plex Sans Arabic — مرخصة وفق SIL Open Font License 1.1. ملفات الترخيص مرفقة مع الشفرة.")
- }
 }

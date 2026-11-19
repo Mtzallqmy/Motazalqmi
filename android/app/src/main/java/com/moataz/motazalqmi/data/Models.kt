@@ -12,12 +12,14 @@ data class ArticleDto(
  val readTime: String = "5 دقائق", val views: Int = 0, val likes: Int = 0,
  val authorId:String = "", val updatedAt: String = "",val scheduledAt:String = "",val authorImage: String = "",val fontFamily: String = "amiri",val fontSize: Int = 22
 )
+data class AuthorProfileDto(val id: String = "", val name: String = "", val bio: String = "", val image: String = "", val link: String = "")
 data class SectionDto(val id: String = "", val title: String = "", val subtitle: String = "")
 data class QuoteDto(val id: String = "", val text: String = "", val author: String = "", val source: String = "")
 data class Snapshot(
  val apiVersion: Int = 0, val mode: String = "snapshot", val complete: Boolean = false,
  val articles: List<ArticleDto> = emptyList(), val sections: List<SectionDto> = emptyList(),
- val quotes: List<QuoteDto> = emptyList(), val site: Map<String, Any> = emptyMap(), val total: Int = 0
+ val quotes: List<QuoteDto> = emptyList(), val site: Map<String, Any> = emptyMap(), val total: Int = 0,
+ val authors: List<AuthorProfileDto> = emptyList()
 )
 @Entity(tableName = "articles")
 data class ArticleEntity(@PrimaryKey val id: String, val payload: String, val available: Boolean = true)
