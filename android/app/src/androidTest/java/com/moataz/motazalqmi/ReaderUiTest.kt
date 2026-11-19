@@ -70,12 +70,33 @@ class ReaderUiTest {
   rule.onNodeWithTag("featured-article-seed-1").performClick()
   rule.onNodeWithContentDescription("إعدادات القراءة").performClick()
   rule.onNodeWithText("مساحتك للقراءة").assertIsDisplayed()
-  rule.onNodeWithText("نهاري").performClick()
+  rule.onNodeWithText("محاذاة النص").performScrollTo().assertIsDisplayed()
+  rule.onNodeWithText("نهاري").performScrollTo().performClick()
   rule.onNodeWithText("تم").performClick()
   rule.onNodeWithContentDescription("فهرس المقالة").performClick()
   rule.onNodeWithText("فهرس المقالة").assertIsDisplayed()
   rule.onNodeWithText("إغلاق").performClick()
   capture("reader-tools")
+ }
+
+ @Test fun magazineMenuOpensWebsiteSectionsAndWriter() {
+  rule.waitUntil(20000) { rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty() }
+  rule.onNodeWithContentDescription("القائمة").performClick()
+  rule.onNodeWithTag("magazine-menu").performScrollToNode(hasText("من بطون الكتب"))
+  rule.onNode(hasText("من بطون الكتب") and hasAnyAncestor(hasTestTag("magazine-menu"))).performClick()
+  rule.onNodeWithText("مادة منشورة", substring = true).assertIsDisplayed()
+  capture("magazine-section")
+  rule.onNodeWithContentDescription("لوحة الكاتب").performClick()
+  rule.onNodeWithText("البريد الإداري").assertIsDisplayed()
+ }
+
+ @Test fun articleOpensTheAuthorsOfflineCatalogue() {
+  rule.waitUntil(20000) { rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty() }
+  rule.onNodeWithTag("home-feed").performScrollToNode(hasTestTag("featured-article-seed-1"))
+  rule.onNodeWithTag("featured-article-seed-1").performClick()
+  rule.onNodeWithTag("reader-author").performScrollTo().performClick()
+  rule.onNodeWithText("كتابات معتز العلقمي", substring = true).assertIsDisplayed()
+  capture("magazine-author")
  }
 
 }

@@ -56,3 +56,16 @@ test('new API resources report snapshots, validation, ETags and failures',async(
  const b=fake({query:{resource:'sync'}});await createResourceHandler(async()=>{throw Error('db secret')})(b.req,b.res);assert.equal(b.res.statusCode,503);assert.ok(!b.res.body.includes('secret'));
  const c=fake({method:'POST',query:{resource:'sync'}});await handler(c.req,c.res);assert.equal(c.res.statusCode,405);
 });
+
+test('author profile changes update the authoritative Android sync revision', async () => {
+ const {publishedSnapshot} = await import('../server/snapshot.js');
+ const read = authors => publishedSnapshot(async (strings) => {
+  assert.match(strings.join(''), /id LIKE 'author:%'/);
+  return [{articles:[], authors}];
+ });
+ const first = await read([{id:'writer',name:'كاتب',bio:'نبذة أولى',image:'',link:''}]);
+ const amended = await read([{...first.authors[0],bio:'نبذة محدّثة'}]);
+ assert.equal(amended.complete,true);
+ assert.equal(amended.authors[0].bio,'نبذة محدّثة');
+ assert.notEqual(first.revision, amended.revision);
+});

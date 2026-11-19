@@ -27,7 +27,8 @@ interface BlogApi {
 data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map<String, ReaderState> = emptyMap(),
  val sections: List<SectionDto> = emptyList(), val quotes: List<QuoteDto> = emptyList(),
  val available: Set<String> = emptySet(), val syncedAt: Long = 0, val about: String = "",
- val siteName: String = "مدونة معتز العلقمي", val tagline: String = "حيث تلتقي الكلمة بالفكر، ويزهر الأدب")
+ val siteName: String = "مدونة معتز العلقمي", val tagline: String = "حيث تلتقي الكلمة بالفكر، ويزهر الأدب",
+ val authors: List<AuthorProfileDto> = emptyList())
 
 @Singleton class BlogRepository @Inject constructor(
  private val db: BlogDatabase, private val api: BlogApi, private val gson: Gson,
@@ -45,7 +46,7 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
     .mapNotNull { runCatching { gson.fromJson(it.payload, QuoteDto::class.java) }.getOrNull() }).distinctBy { quoteId(it) },
    rows.filter { it.available }.map { it.id }.toSet(), m["synced_at"]?.toLongOrNull() ?: 0,
    m["about"] ?: "", m["site_name"] ?: "مدونة معتز العلقمي",
-   m["tagline"] ?: "حيث تلتقي الكلمة بالفكر، ويزهر الأدب")
+   m["tagline"] ?: "حيث تلتقي الكلمة بالفكر، ويزهر الأدب", parseList<AuthorProfileDto>(m["authors"]))
  }
  private inline fun <reified T> parseList(raw: String?): List<T> = runCatching {
   gson.fromJson<List<T>>(raw ?: "[]", object : TypeToken<List<T>>() {}.type)
@@ -84,6 +85,7 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
    dao.retireAll()
    dao.putArticles(s.articles.map { ArticleEntity(it.id, gson.toJson(it)) })
    dao.putMetadata(listOf(Metadata("sections", gson.toJson(s.sections)), Metadata("quotes", gson.toJson(s.quotes)),
+    Metadata("authors", gson.toJson(s.authors)),
     Metadata("about", s.site["about"]?.toString() ?: ""),
     Metadata("site_name", s.site["name"]?.toString() ?: "مدونة معتز العلقمي"),
     Metadata("tagline", s.site["tagline"]?.toString() ?: "")) +

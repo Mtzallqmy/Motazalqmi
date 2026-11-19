@@ -1,7 +1,7 @@
-name: Motaz 3.3 verified release
+name: Motaz 3.4 verified release
 on:
   push:
-    branches: [main, feat/motazalqami-complete-editorial-33]
+    branches: [main, feat/native-website-parity]
     paths: ['android/**', 'src/**', 'server/**', 'shared/**', 'api/**', 'db/**', 'scripts/**', 'vercel.json', 'tests/**', 'package*.json', '.github/workflows/edition-release.yml']
   workflow_dispatch:
 permissions:
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: web-3.3-verification
+          name: web-3.4-verification
           path: |
             mobile-home.png
             desktop-home.png
@@ -70,23 +70,23 @@ jobs:
             test "$digest" = "$original"
           else
             abi+=(-PmotazIndependentEdition=true)
-            pkg="$pkg.edition33"
+            pkg="$pkg.edition34"
             export ANDROID_KEYSTORE_PASSWORD="$(openssl rand -hex 32)"
             export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
-            export ANDROID_KEY_ALIAS=edition33
-            keytool -genkeypair -keystore "$ANDROID_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEY_PASSWORD -alias edition33 -keyalg RSA -keysize 3072 -validity 10000 -dname 'CN=Motaz Alalqami Independent Edition'
+            export ANDROID_KEY_ALIAS=edition34
+            keytool -genkeypair -keystore "$ANDROID_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEY_PASSWORD -alias edition34 -keyalg RSA -keysize 3072 -validity 10000 -dname 'CN=Motaz Alalqami Independent Edition'
             printf '%s' "$ANDROID_KEYSTORE_PASSWORD" > "$RUNNER_TEMP/password.txt"
             cp "$RUNNER_TEMP/password.txt" "$RUNNER_TEMP/key-password.txt"
             printf '%s' "$ANDROID_KEY_ALIAS" > "$RUNNER_TEMP/alias.txt"
-            tar -C "$RUNNER_TEMP" -cf - release.jks password.txt key-password.txt alias.txt | openssl cms -encrypt -aes-256-cbc -binary -outform DER -out dist/edition33-recovery.cms android/release/recovery-certificate.pem
+            tar -C "$RUNNER_TEMP" -cf - release.jks password.txt key-password.txt alias.txt | openssl cms -encrypt -aes-256-cbc -binary -outform DER -out dist/edition34-recovery.cms android/release/recovery-certificate.pem
           fi
           bash android/gradlew -p android :app:testDebugUnitTest :app:lintDebug :app:assembleRelease "${abi[@]}" --no-daemon
-          apk="dist/Motazalqmi-3.3.0-${pkg##*.}-ARM64.apk"
+          apk="dist/Motazalqmi-3.4.0-${pkg##*.}-ARM64.apk"
           cp android/app/build/outputs/apk/release/app-release.apk "$apk"
           "$sdk/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$apk" > dist/signature.txt
           "$sdk/zipalign" -c 4 "$apk"
           "$sdk/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging"
-          grep -F "package: name='$pkg' versionCode='30300'" "$RUNNER_TEMP/badging"
+          grep -F "package: name='$pkg' versionCode='30400'" "$RUNNER_TEMP/badging"
           grep -Fx "sdkVersion:'26'" "$RUNNER_TEMP/badging"
           grep -Fx "native-code: 'arm64-v8a'" "$RUNNER_TEMP/badging"
           unzip -tq "$apk"
@@ -97,7 +97,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: native-3.3-quality
+          name: native-3.4-quality
           path: android/app/build/reports/
       - name: Remove private signing material
         if: always()
@@ -124,7 +124,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: device-3.3-API-${{ matrix.api }}
+          name: device-3.4-API-${{ matrix.api }}
           path: |
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
@@ -155,6 +155,12 @@ jobs:
             grep -F 'Status: ok' /tmp/launch
             sleep 5
             adb shell pidof "$(cat dist/package.txt)"
+            adb exec-out screencap -p > native-magazine-home.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-magazine-home
+          path: native-magazine-home.png
+          if-no-files-found: error
   publish:
     needs: [web, older-android, signed-device]
     if: github.ref == 'refs/heads/main'
@@ -169,15 +175,15 @@ jobs:
           cd dist
           sha256sum -c SHA256SUMS
           if [ "$(cat package.txt)" = com.moataz.motazalqmi ]; then
-            tag=v3.3.0
+            tag=v3.4.0
             note='تحديث رسمي موقّع بشهادة الإصدار 2.0.0.'
             flags=()
           else
-            tag=v3.3.0-independent.1
-            note='نسخة مستقلة باسم com.moataz.motazalqmi.edition33 تثبت بجانب النسخ السابقة. محفوظات كل نسخة خاصة بها.'
+            tag=v3.4.0-independent.1
+            note='نسخة مستقلة باسم com.moataz.motazalqmi.edition34 تثبت بجانب النسخ السابقة. محفوظات كل نسخة خاصة بها.'
             flags=(--prerelease)
           fi
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
           printf '%s\n\n' "$note" > RELEASE-NOTES.md
-          printf '%s\n' 'Android 8+ · ARM64 · Release optimized' 'جدولة النشر من الموقع والتطبيق، إدارة ملفات الكتّاب وصورهم، مكتبة وسائط أصلية مع حذف آمن يمنع فقد الملفات المستخدمة، وحفظ المسودات محليًا. تظل تجربة القراءة والمحفوظات والعمل دون اتصال متاحة.' 'الموقع ولوحة الكاتب والمزامنة تستخدم المستودع الرئيسي. تحقق الملف بشهادة Android وzipalign وSHA256. اختبارات الواجهة على API 26 و28 و29 واختبار تشغيل الملف الموقّع على API35 مع ترجمة ARM.' 'Telegram: أضيف التحقق من هوية البوت وWebhook وتأكيد تغيير الإعدادات ودعم المرفقات المحدودة. التشغيل الفعلي يتطلب رمزًا مجدّدًا في متغيرات Vercel وربط المدير واختبار الأوامر.' 'التوقيع المستقل يثبّت تطبيقًا بجانب الإصدارات السابقة، وتبقى محفوظاتها داخلها. احتفظ بها أثناء الانتقال.' >> RELEASE-NOTES.md
-          gh release create "$tag" * -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" --title 'مدونة معتز العلقمي 3.3 — استوديو النشر' --notes-file RELEASE-NOTES.md
+          printf '%s\n' 'Android 8+ · ARM64 · Release optimized' 'تجربة مجلة موحّدة: أيقونات الموقع، قائمة أبواب، رفوف كتب وأدب، ملفات كتّاب، بحث وفرز، وبطاقات تدعم الحفظ والإعجاب والمشاركة. أضيفت محاذاة النص وعرضه وتباعد فقراته إلى إعدادات القراءة.' 'الموقع ولوحة الكاتب والمزامنة تستخدم المستودع الرئيسي. تحقق الملف بشهادة Android وzipalign وSHA256. اختبارات الواجهة على API 26 و28 و29 واختبار تشغيل الملف الموقّع على API35 مع ترجمة ARM.' 'تزامن ملفات الكتّاب مع المقالات عبر Neon. لوحة الكاتب تدعم تحرير الهوية والاقتباسات وفحص Telegram، ويظل ربط حساب Telegram من لوحة الموقع.' 'التوقيع المستقل يثبّت تطبيقًا بجانب الإصدارات السابقة، وتبقى محفوظاتها داخلها. احتفظ بها أثناء الانتقال.' >> RELEASE-NOTES.md
+          gh release create "$tag" * -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" --title 'مدونة معتز العلقمي 3.4 — أبواب المجلة' --notes-file RELEASE-NOTES.md

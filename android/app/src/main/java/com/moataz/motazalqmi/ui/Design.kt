@@ -8,18 +8,21 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import com.moataz.motazalqmi.R
 
-val Ink = Color(0xFF30271F)
+val Ink = Color(0xFF202625)
 val Gold = Color(0xFFA67E39)
-val Teal = Color(0xFF164B43)
-val Paper = Color(0xFFFCF7EC)
+val Teal = Color(0xFF164541)
+val Paper = Color(0xFFF7F3EB)
 val Plex = FontFamily(Font(R.font.plex))
 val Naskh = FontFamily(Font(R.font.naskh))
 val Amiri = FontFamily(Font(R.font.amiri))
 @Composable fun BlogTheme(theme: String, content: @Composable () -> Unit) {
  val dark = theme == "dark" || (theme == "system" && isSystemInDarkTheme())
  val colors = if (dark) darkColorScheme(primary = Color(0xFFD6BC82), secondary = Color(0xFF9AC6B9),
-  background = Color(0xFF191C19), surface = Color(0xFF202620), onSurface = Color(0xFFF2E9D7), onBackground = Color(0xFFF2E9D7))
- else lightColorScheme(primary = Teal, secondary = Color(0xFF795A28), background = Paper, surface = Color(0xFFFFFCF5), primaryContainer = Color(0xFFE4EFEA), surfaceVariant = Color(0xFFF1E8D9), onSurface = Ink, onBackground = Ink)
+  onPrimary = Color(0xFF272012), primaryContainer = Color(0xFF28443B), onPrimaryContainer = Color(0xFFE5EFE0),
+  secondaryContainer = Color(0xFF3D3427), onSecondaryContainer = Color(0xFFF2E9D7),
+  background = Color(0xFF191C19), surface = Color(0xFF202620), surfaceVariant = Color(0xFF34382F),
+  onSurfaceVariant = Color(0xFFE0D7C4), onSurface = Color(0xFFF2E9D7), onBackground = Color(0xFFF2E9D7))
+ else lightColorScheme(primary = Teal, secondary = Color(0xFF795A28), background = Paper, surface = Color(0xFFFFFCF5), primaryContainer = Color(0xFFE4EFEA), surfaceVariant = Color(0xFFEFE7DA), secondaryContainer = Color(0xFFECE2CC), outlineVariant = Color(0xFFD2C3A7), onSurface = Ink, onBackground = Ink)
  val base = Typography()
  MaterialTheme(colorScheme = colors, typography = base.copy(
   bodySmall = base.bodySmall.copy(fontFamily = Plex), labelSmall = base.labelSmall.copy(fontFamily = Plex),

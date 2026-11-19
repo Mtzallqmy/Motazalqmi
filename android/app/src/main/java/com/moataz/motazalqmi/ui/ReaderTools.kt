@@ -2,6 +2,9 @@ package com.moataz.motazalqmi.ui
 
 import android.media.MediaPlayer
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -70,29 +73,65 @@ import kotlinx.coroutines.delay
 private fun audioTime(ms: Int): String = "%d:%02d".format(ms / 60000, ms / 1000 % 60)
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun ReaderSettingsSheet(settings: ReadingSettings, change: (ReadingSettings) -> Unit, dismiss: () -> Unit) {
+@Composable internal fun ReaderSettingsSheet(settings: ReadingSettings, change: (ReadingSettings) -> Unit,
+    focus: Boolean, setFocus: (Boolean) -> Unit, dismiss: () -> Unit) {
  ModalBottomSheet(onDismissRequest = dismiss) {
-  Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-   Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-    Text("مساحتك للقراءة", modifier=Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
-    TextButton(onClick=dismiss){Text("تم")}
+  Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+   Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Text("مساحتك للقراءة", modifier = Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
+    TextButton(onClick = dismiss) { Text("تم") }
    }
-   Text("حجم الخط · ${settings.size.toInt()}")
-   Slider(settings.size, { change(settings.copy(size = it)) }, valueRange = 16f..34f)
-   Text("تباعد السطور")
-   Slider(settings.spacing, { change(settings.copy(spacing = it)) }, valueRange = 1.3f..2.4f)
-   Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    listOf("amiri" to "أميري", "naskh" to "نسخ", "plex" to "بلكس").forEach { (id, name) ->
-     FilterChip(settings.font == id, { change(settings.copy(font = id)) }, { Text(name) })
+   Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text("حجم الخط")
+    FilterChip(settings.useArticleSize, { change(settings.copy(useArticleSize = !settings.useArticleSize)) }, { Text("اختيار الكاتب") })
+    Slider(settings.size, { change(settings.copy(size = it, useArticleSize = false)) }, valueRange = 16f..34f)
+    Text("تباعد السطور")
+    Slider(settings.spacing, { change(settings.copy(spacing = it)) }, valueRange = 1.3f..2.5f)
+    Text("تباعد الفقرات")
+    Slider(settings.paragraphSpacing, { change(settings.copy(paragraphSpacing = it)) }, valueRange = .6f..1.8f, steps = 1)
+    ReaderOptionRow("الخط", settings.font, listOf("editor" to "اختيار الكاتب", "amiri" to "أميري", "naskh" to "نسخ", "plex" to "بلكس")) {
+     change(settings.copy(font = it))
     }
-   }
-   Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    listOf("system" to "النظام", "light" to "نهاري", "dark" to "ليلي").forEach { (id, name) ->
-     FilterChip(settings.theme == id, { change(settings.copy(theme = id)) }, { Text(name) })
+    ReaderOptionRow("عرض النص", settings.textWidth, listOf("narrow" to "ضيّق", "regular" to "متوسط", "wide" to "واسع")) {
+     change(settings.copy(textWidth = it))
+    }
+    ReaderOptionRow("محاذاة النص", settings.alignment, listOf("start" to "يمين", "justify" to "ضبط", "center" to "توسيط")) {
+     change(settings.copy(alignment = it))
+    }
+    ReaderOptionRow("المظهر", settings.theme, listOf("system" to "النظام", "light" to "نهاري", "dark" to "ليلي")) {
+     change(settings.copy(theme = it))
+    }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+     Text("قراءة مركزة", Modifier.weight(1f))
+     Switch(focus, onCheckedChange = setFocus)
     }
    }
   }
  }
+}
+
+@Composable private fun ReaderOptionRow(label: String, selected: String, options: List<Pair<String, String>>, change: (String) -> Unit) {
+ Text(label)
+ Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+  options.forEach { (id, name) -> FilterChip(selected == id, { change(id) }, { Text(name) }) }
+ }
+}
+
+internal fun spaceReaderParagraphs(body: android.text.Spanned, ratio: Float): android.text.Spanned {
+ val result = android.text.SpannableString(body)
+ var lastWasNewline = false
+ body.forEachIndexed { index, char ->
+  if (char == '\n' && lastWasNewline) {
+   val spacer = android.text.style.LineHeightSpan { _, _, _, _, _, metrics ->
+    val line = (metrics.descent - metrics.ascent).coerceAtLeast(1)
+    metrics.descent += ((ratio - 1f) * line).toInt()
+    metrics.bottom = maxOf(metrics.bottom, metrics.descent)
+   }
+   result.setSpan(spacer, index, index + 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+  }
+  lastWasNewline = char == '\n'
+ }
+ return result
 }
 
 @Composable internal fun ReaderVideo(url: String) {
@@ -110,4 +149,21 @@ private fun audioTime(ms: Int): String = "%d:%02d".format(ms / 60000, ms / 1000 
   onDispose { owner.lifecycle.removeObserver(observer); view.stopPlayback() }
  }
  androidx.compose.ui.viewinterop.AndroidView(factory={view},modifier=Modifier.fillMaxWidth().height(220.dp))
+}
+
+internal fun android.widget.TextView.applyReaderJustification(enabled: Boolean) {
+ if (android.os.Build.VERSION.SDK_INT >= 29) {
+  justificationMode = if (enabled) android.graphics.text.LineBreaker.JUSTIFICATION_MODE_INTER_WORD
+   else android.graphics.text.LineBreaker.JUSTIFICATION_MODE_NONE
+ } else {
+  applyLegacyJustification(enabled)
+ }
+}
+
+// Android 8 and 9 expose these TextView flags through Layout. LineBreaker was added in Android 10.
+@android.annotation.SuppressLint("WrongConstant")
+@Suppress("DEPRECATION")
+private fun android.widget.TextView.applyLegacyJustification(enabled: Boolean) {
+ justificationMode = if (enabled) android.text.Layout.JUSTIFICATION_MODE_INTER_WORD
+  else android.text.Layout.JUSTIFICATION_MODE_NONE
 }
