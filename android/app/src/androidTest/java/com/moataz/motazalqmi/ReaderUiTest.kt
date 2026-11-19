@@ -89,4 +89,13 @@ class ReaderUiTest {
   rule.onNodeWithText("البريد الإداري").assertIsDisplayed()
  }
 
+ @Test fun articleOpensTheAuthorsOfflineCatalogue() {
+  rule.waitUntil(20000) { rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty() }
+  rule.onNodeWithTag("home-feed").performScrollToNode(hasTestTag("featured-article-seed-1"))
+  rule.onNodeWithTag("featured-article-seed-1").performClick()
+  rule.onNodeWithTag("reader-author").performScrollTo().performClick()
+  rule.onNodeWithText("كتابات معتز العلقمي", substring = true).assertIsDisplayed()
+  capture("magazine-author")
+ }
+
 }

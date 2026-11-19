@@ -41,13 +41,15 @@ import javax.inject.Inject
 data class WriterLogin(val email:String,val password:String,val remember:Boolean=true)
 data class WriterRefresh(val grantType:String="refresh",val refreshToken:String)
 data class WriterAccess(val accessToken:String="",val expiresAt:Long=0L,val refreshToken:String?=null,val refreshExpiresAt:Long=0L)
-data class WriterList(val articles:List<ArticleDto> = emptyList())
+data class WriterList(val articles: List<ArticleDto> = emptyList(), val editorial: StudioEditorial? = null)
 data class MediaDirectRequest(val mime:String,val base64:String,val purpose:String)
 data class MediaDirectResponse(val url:String="")
 data class WriterAction(val action:String,val expectedVersion:String?=null,val article:ArticleDto?=null,val id:String?=null)
 data class WriterProfile(val id:String="",val name:String="",val image:String="",val bio:String="",val link:String="")
 data class WriterProfiles(val authors:List<WriterProfile> = emptyList())
 interface WriterApi {
+ @POST("api/articles") suspend fun saveEditorial(@Header("Authorization") bearer: String, @Body value: StudioEditorialRequest)
+ @POST("api/v1/telegram-pair") suspend fun telegram(@Header("Authorization") bearer: String, @Body value: StudioTelegramRequest): StudioTelegramStatus
  @GET("api/v1/assets") suspend fun media(@Header("Authorization") bearer:String,@Query("cursor") cursor:String?):WriterMediaLibrary
  @POST("api/v1/media-delete") suspend fun removeMedia(@Header("Authorization") bearer:String,@Body value:MediaDeleteRequest)
  @POST("api/v1/authors") suspend fun saveAuthor(@Header("Authorization") bearer:String,@Body value:AuthorChange):WriterAuthorResponse
@@ -65,6 +67,7 @@ interface WriterApi {
 }
 
 data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val restoring:Boolean=true,val error:String="",
+ val editorial: StudioEditorial? = null, val telegram: StudioTelegramStatus? = null,
  val studio:String="articles",val notice:String="",val media:List<WriterMedia> = emptyList(),val mediaCursor:String?=null,val pendingMedia:List<WriterPendingMedia> = emptyList(),val profiles:List<WriterProfile> = emptyList(),val progress:Int?=null,val articles:List<ArticleDto> = emptyList(),val editing:ArticleDto?=null,val editorOpen:Boolean=false)
 
 @HiltViewModel class WriterViewModel @Inject constructor(
@@ -126,8 +129,8 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   viewModelScope.launch{
    ui.value=ui.value.copy(busy=true,error="")
    try{
-    val articles=api.articles("admin",credential()).articles
-    ui.value=ui.value.copy(articles=articles,busy=false,authorized=true)
+    val result = api.articles("admin", credential())
+    ui.value = ui.value.copy(articles = result.articles, editorial = result.editorial, busy = false, authorized = true)
    }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="تعذر تحميل المقالات؛ تحقق من الاتصال أو أعد تسجيل الدخول.")}
   }
  }
@@ -159,7 +162,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
     drafts.edit().remove(ui.value.editing?.id?:"new").apply()
     ui.value=ui.value.copy(editorOpen=false,busy=false)
     reload()
-   }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="تعذر حفظ المقال؛ تحقق من الرابط الوصفي وبيانات المقال.")}
+   }catch (e:Exception){ui.value=ui.value.copy(busy=false,error=studioError(e,"تعذر حفظ المقال؛ تحقق من الرابط الوصفي وبيانات المقال."))}
   }
  }
  fun delete(id:String){
@@ -176,6 +179,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   ui.value=ui.value.copy(studio=value,error="",notice="")
   when(value){
    "media"->loadMedia(null)
+   "telegram" -> checkTelegram("status")
    "authors"->viewModelScope.launch { try{ui.value=ui.value.copy(profiles=api.authors().authors)}catch(_:Exception){ui.value=ui.value.copy(error="تعذر تحميل الكتّاب")} }
   }
  }
@@ -221,6 +225,29 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    finally{ui.value=ui.value.copy(busy=false)}
   }
  }
+ fun saveEditorial(value: StudioEditorialFields) {
+  if (ui.value.busy) return
+  viewModelScope.launch {
+   ui.value = ui.value.copy(busy = true, error = "", notice = "")
+   try {
+    api.saveEditorial(credential(), StudioEditorialRequest(editorial = value))
+    ui.value = ui.value.copy(notice = "حُفظت إعدادات المدونة")
+    reload()
+   } catch (error: kotlinx.coroutines.CancellationException) { throw error }
+   catch (error: Exception) { ui.value = ui.value.copy(error = studioError(error, "تعذّر حفظ إعدادات المدونة")) }
+   finally { ui.value = ui.value.copy(busy = false) }
+  }
+ }
+ fun checkTelegram(action: String) {
+  if (ui.value.busy) return
+  viewModelScope.launch {
+   ui.value = ui.value.copy(busy = true, error = "")
+   try { ui.value = ui.value.copy(telegram = api.telegram(credential(), StudioTelegramRequest(action))) }
+   catch (error: kotlinx.coroutines.CancellationException) { throw error }
+   catch (error: Exception) { ui.value = ui.value.copy(error = studioError(error, "تعذّر التحقق من Telegram")) }
+   finally { ui.value = ui.value.copy(busy = false) }
+  }
+ }
  fun logout(){secureSession.clear();token=null;expiresAt=0;ui.value=WriterUiState(restoring=false)}
  override fun onCleared(){token=null;super.onCleared()}
 }
@@ -230,9 +257,14 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  var email by remember{mutableStateOf("")}
  var password by remember{mutableStateOf("")}
  var remember by rememberSaveable{mutableStateOf(true)}
+ var query by rememberSaveable { mutableStateOf("") }
+ var filter by rememberSaveable { mutableStateOf("all") }
  Column(Modifier.fillMaxSize().padding(20.dp)){
   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-   Text("لوحة الكاتب",style=MaterialTheme.typography.headlineMedium)
+   Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    MagazineIcon(com.moataz.motazalqmi.R.drawable.blog_feather)
+    Text("لوحة الكاتب", style = MaterialTheme.typography.headlineMedium)
+   }
    TextButton(onClick=back){Text("عودة")}
   }
   if(state.notice.isNotBlank())Text(state.notice,color=MaterialTheme.colorScheme.primary)
@@ -241,13 +273,13 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   if(state.busy)LinearProgressIndicator(Modifier.fillMaxWidth())
   if(state.restoring){ Text("جار استعادة جلسة الكاتب المحفوظة…"); return@Column }
   if(state.authorized&&!state.editorOpen)Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-   listOf("articles" to "المقالات","media" to "الوسائط","authors" to "الكتّاب").forEach{(id,label)->
+   listOf("articles" to "المقالات","media" to "الوسائط","authors" to "الكتّاب", "editorial" to "الهوية والاقتباسات", "telegram" to "Telegram").forEach{(id,label)->
     FilterChip(state.studio==id,{vm.selectStudio(id)},{Text(label)})
    }
   }
   if(!state.authorized){
    Spacer(Modifier.height(20.dp))
-   Text("إدارة مقالات Neon من التطبيق. بيانات الكاتب محمية، ولا تُحفظ كلمة المرور.")
+   Text("سجّل الدخول لتحرير المقالات وإدارة الكتّاب والوسائط.")
    OutlinedTextField(email,{email=it},label={Text("البريد الإداري")},singleLine=true,modifier=Modifier.fillMaxWidth(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Email))
    OutlinedTextField(password,{password=it},label={Text("كلمة المرور")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
    Row(verticalAlignment=Alignment.CenterVertically){Text("تذكر دخولي بأمان على هذا الجهاز (30 يومًا)",Modifier.weight(1f));Switch(remember,onCheckedChange={remember=it})}
@@ -256,15 +288,27 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    WriterEditor(state.editing,remember(state.editing?.id){vm.recovery(state.editing?.id)},vm::keepDraft,state.profiles,state.busy,vm::save,vm::closeEditor,vm::delete,vm::uploadMedia)
   } else if(state.studio=="media"){NativeMediaLibrary(state,vm::loadMedia,vm::deleteMedia)}
   else if(state.studio=="authors"){NativeAuthorManager(state,vm::saveProfile,vm::uploadMedia)}
+  else if (state.studio == "editorial") { WriterEditorial(state.editorial, state.busy, vm::reload, vm::saveEditorial) }
+  else if (state.studio == "telegram") { WriterTelegram(state.telegram, state.busy, vm::checkTelegram) }
   else {
+   val articles = state.articles.filter { article ->
+    val status = if (articleIsScheduled(article)) "scheduled" else article.status
+    (filter == "all" || filter == status) && com.moataz.motazalqmi.domain.ArabicSearch.matches(query, article.title, article.author)
+   }
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
     Button(onClick={vm.edit(null)}){Text("مقال جديد")}
     TextButton(onClick=vm::reload){Text("تحديث")}
     TextButton(onClick=vm::logout){Text("تسجيل الخروج")}
    }
-   Text("المقالات المنشورة والمسودات: "+state.articles.size)
+   OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("ابحث في المنشورات") })
+   Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    listOf("all" to "الكل", "published" to "منشور", "draft" to "مسودات", "scheduled" to "مجدول").forEach { (id, label) ->
+     FilterChip(filter == id, { filter = id }, { Text(label) })
+    }
+   }
+   Text("إدارة المنشورات (${articles.size})", style = MaterialTheme.typography.titleMedium)
    LazyColumn(verticalArrangement=Arrangement.spacedBy(12.dp)){
-    items(state.articles,key={it.id}){a->
+    items(articles,key={it.id}){a->
      Card(onClick={vm.edit(a)},shape=RoundedCornerShape(16.dp)){
       Column(Modifier.fillMaxWidth().padding(16.dp)){
        Text(a.title,style=MaterialTheme.typography.titleMedium)

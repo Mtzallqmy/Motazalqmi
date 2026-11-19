@@ -120,13 +120,16 @@ jobs:
           api-level: ${{ matrix.api }}
           arch: x86_64
           disable-animations: true
-          script: bash android/gradlew -p android connectedDebugAndroidTest
+          script: |
+            bash android/gradlew -p android connectedDebugAndroidTest
+            adb pull /sdcard/Android/data/com.moataz.motazalqmi/files/screenshots android/app/build/reports/magazine-screenshots
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: device-3.4-API-${{ matrix.api }}
           path: |
             android/app/build/reports/androidTests/
+            android/app/build/reports/magazine-screenshots/
             android/app/build/outputs/androidTest-results/
   signed-device:
     needs: package

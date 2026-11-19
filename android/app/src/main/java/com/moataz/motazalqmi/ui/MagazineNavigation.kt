@@ -3,6 +3,7 @@ package com.moataz.motazalqmi.ui
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,13 +42,25 @@ internal fun sectionIcon(id: String) = when (id) {
             }
         },
         actions = {
-            IconButton(onClick = saved) { MagazineIcon(R.drawable.blog_bookmark, "المكتبة المحفوظة") }
-            IconButton(onClick = search) { MagazineIcon(R.drawable.blog_search, "فتح البحث") }
-            IconButton(onClick = writer) { MagazineIcon(R.drawable.blog_feather, "لوحة الكاتب") }
-            IconButton(onClick = menu) { MagazineIcon(R.drawable.blog_menu, "القائمة") }
+            HeaderAction(R.drawable.blog_bookmark, "المكتبة المحفوظة", saved)
+            HeaderAction(R.drawable.blog_search, "فتح البحث", search)
+            HeaderAction(R.drawable.blog_feather, "لوحة الكاتب", writer, highlighted = true)
+            HeaderAction(R.drawable.blog_menu, "القائمة", menu)
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
     )
+}
+
+@Composable private fun HeaderAction(@DrawableRes icon: Int, label: String, click: () -> Unit, highlighted: Boolean = false) {
+    IconButton(onClick = click, modifier = Modifier.size(46.dp)) {
+        Surface(
+            shape = RoundedCornerShape(11.dp), modifier = Modifier.size(39.dp),
+            color = if (highlighted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Box(contentAlignment = Alignment.Center) { MagazineIcon(icon, label) }
+        }
+    }
 }
 
 @Composable internal fun MagazineMenu(library: Library, currentRoute: String, navigate: (String) -> Unit, dismiss: () -> Unit) {

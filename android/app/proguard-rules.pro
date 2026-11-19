@@ -19,3 +19,5 @@
 -keep class com.moataz.motazalqmi.ui.MediaDeleteRequest { *; }
 -keep class com.moataz.motazalqmi.ui.AuthorChange { *; }
 -keep class com.moataz.motazalqmi.ui.WriterAuthorResponse { *; }
+
+-keep class com.moataz.motazalqmi.ui.Studio* { *; }

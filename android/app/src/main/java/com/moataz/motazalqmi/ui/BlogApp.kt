@@ -94,7 +94,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
    if (!route.startsWith("article") && route != "writer") NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
     val icons = listOf(R.drawable.blog_house, R.drawable.blog_search, R.drawable.blog_bookmark, R.drawable.blog_settings)
     tabs.forEachIndexed { index, (path, title) ->
-     NavigationBarItem(selected = route == path, onClick = { openTab(path) },
+     NavigationBarItem(selected = route == path || (path == "search" && route.startsWith("search/")), onClick = { openTab(path) },
       icon = { MagazineIcon(icons[index]) }, label = { Text(title) })
     }
    }
@@ -108,6 +108,9 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
      else MagazineSection(id, library, settings, openSection, openArticle, vm::save)
     }
     composable("search") { Search(library, settings, openArticle) }
+    composable("search/{term}", arguments = listOf(navArgument("term") { type = NavType.StringType })) { entry ->
+     Search(library, settings, openArticle, entry.arguments?.getString("term").orEmpty())
+    }
     composable("saved") { Saved(library, settings, vm::save, openArticle) }
     composable("settings") { SettingsPage(settings, library.syncedAt, busy, vm::configure, vm::sync, vm::clean, { openSection("about") }, openWriter) }
     composable("writer") {
@@ -121,7 +124,8 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
      val article = library.articles.find { it.id == entry.arguments?.getString("id") }
      if (article == null) Empty("هذا المقال غير متاح محليًا")
      else Reader(article, library, settings, vm, { nav.popBackStack() }, openArticle, openSection,
-      { nav.navigate("author/${Uri.encode(it)}") { launchSingleTop = true } })
+      { nav.navigate("author/${Uri.encode(it)}") { launchSingleTop = true } },
+      { nav.navigate("search/${Uri.encode(it)}") { launchSingleTop = true } })
     }
    }
   }
@@ -148,10 +152,10 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
  if (url.startsWith("https://")) SubcomposeAsyncImage(model = coil.request.ImageRequest.Builder(context).data(readerImageUrl(url))
   .networkCachePolicy(if (settings.wifiImages && !wifi) coil.request.CachePolicy.DISABLED else coil.request.CachePolicy.ENABLED)
   .diskCachePolicy(coil.request.CachePolicy.ENABLED).build(),
-  contentDescription = "صورة من المقال", modifier = Modifier.fillMaxWidth().height(180.dp),
+  contentDescription = "غلاف المقالة", modifier = Modifier.fillMaxWidth().aspectRatio(1.65f).clip(RoundedCornerShape(14.dp)),
   contentScale = androidx.compose.ui.layout.ContentScale.Crop,
   loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(30.dp)) } },
-  error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("تعذر عرض الصورة. جرّب اتصالًا آخر.") } })
+  error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { MagazineIcon(R.drawable.blog_book_open, "الغلاف غير متاح حاليًا") } })
 }
 @Composable private fun ArticleList(articles: List<ArticleDto>, settings: ReadingSettings, title: String, open: (String) -> Unit) {
  LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -159,8 +163,8 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
   items(articles, key = { it.id }) { ArticleCard(it, settings, open) }
  }
 }
-@Composable private fun Search(library: Library, settings: ReadingSettings, open: (String) -> Unit) {
- var query by rememberSaveable { mutableStateOf("") }
+@Composable private fun Search(library: Library, settings: ReadingSettings, open: (String) -> Unit, initialQuery: String = "") {
+ var query by rememberSaveable(initialQuery) { mutableStateOf(initialQuery) }
  var category by rememberSaveable { mutableStateOf("") }
  var order by rememberSaveable { mutableStateOf("recent") }
  var results by remember { mutableStateOf(emptyList<ArticleDto>()) }
@@ -193,7 +197,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
   Column(Modifier.padding(24.dp)) {
    MagazineIcon(R.drawable.blog_quote)
    SelectionContainer { Text(q.text, Modifier.padding(vertical = 16.dp), fontFamily = Amiri, fontSize = 25.sp, lineHeight = 43.sp) }
-   Text(q.author + " · " + q.source, fontFamily = Plex)
+   Text(listOf(q.author, q.source).filter { it.isNotBlank() }.joinToString(" · "), fontFamily = Plex)
    if (interactive) Row {
     IconButton(onClick = save) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "حفظ الاقتباس") }
     IconButton(onClick = { clipboard.setText(AnnotatedString(q.text + "\n" + q.author)) }) { Icon(Icons.Default.ContentCopy, "نسخ الاقتباس") }
@@ -227,7 +231,7 @@ internal fun share(context: android.content.Context, text: String) {
 }
 
 @OptIn(FlowPreview::class)
-@Composable private fun Reader(a: ArticleDto, library: Library, settings: ReadingSettings, vm: BlogViewModel, back: () -> Unit, open: (String) -> Unit, section: (String) -> Unit, author: (String) -> Unit) {
+@Composable private fun Reader(a: ArticleDto, library: Library, settings: ReadingSettings, vm: BlogViewModel, back: () -> Unit, open: (String) -> Unit, section: (String) -> Unit, author: (String) -> Unit, search: (String) -> Unit) {
  val context = LocalContext.current
  val state = library.states[a.id]
  val scroll = rememberScrollState(state?.offset ?: 0)
@@ -285,7 +289,7 @@ internal fun share(context: android.content.Context, text: String) {
    val minutes = (a.content.split(Regex("\\s+")).size / 180).coerceAtLeast(1)
    Box(Modifier.clickable(enabled = a.author.isNotBlank() || a.authorId.isNotBlank()) {
     author(a.authorId.ifBlank { a.author })
-   }.padding(vertical = 6.dp)) {
+   }.testTag("reader-author").padding(vertical = 6.dp)) {
     AuthorIdentity(profile?.name ?: a.author, profile?.image?.takeIf { it.isNotBlank() } ?: a.authorImage, "${a.publishDate} · $minutes دقائق قراءة")
    }
    Spacer(Modifier.height(14.dp)); Cover(a.coverImage, settings)
@@ -337,6 +341,9 @@ internal fun share(context: android.content.Context, text: String) {
      }
     }
    }
+   }
+   if (!focus && a.tags.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    items(a.tags.distinct()) { tag -> AssistChip(onClick = { search(tag) }, label = { Text("#$tag") }) }
    }
    Spacer(Modifier.height(30.dp))
    val published = library.articles.filter { it.id in library.available }
