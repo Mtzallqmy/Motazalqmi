@@ -48,7 +48,28 @@ data class WriterAction(val action:String,val expectedVersion:String?=null,val a
 data class WriterProfile(val id:String="",val name:String="",val image:String="",val bio:String="",val link:String="")
 data class WriterProfiles(val authors:List<WriterProfile> = emptyList())
 interface WriterApi {
- @POST("api/articles") suspend fun saveEditorial(@Header("Authorization") bearer: String, @Body value: StudioEditorialRequest)
+ @GET("api/v1/revisions") suspend fun revisions(@Header("Authorization") bearer: String, @Query("id") id: String): StudioRevisionList
+ @POST("api/articles") suspend fun loadRevisions() {
+  val article = ui.value.editing ?: return
+  if (ui.value.busy) return
+  viewModelScope.launch {
+   ui.value = ui.value.copy(busy = true, error = "")
+   try {
+    val result = api.revisions(credential(), article.id)
+    if (ui.value.editorOpen && ui.value.editing?.id == article.id) ui.value = ui.value.copy(revisions = result.revisions)
+   } catch (error: kotlinx.coroutines.CancellationException) { throw error }
+   catch (error: Exception) { ui.value = ui.value.copy(error = studioError(error, "تعذّر تحميل نسخ المقالة")) }
+   finally { ui.value = ui.value.copy(busy = false) }
+  }
+ }
+ fun restoreRevision(revision: StudioRevision) {
+  val current = ui.value.editing ?: return
+  keepDraft(current.id, revision.data.copy(id = current.id, updatedAt = current.updatedAt))
+  ui.value = ui.value.copy(revisions = null, editorGeneration = ui.value.editorGeneration + 1,
+   notice = "استُعيدت النسخة إلى المحرر. احفظها بعد المراجعة.")
+ }
+ fun closeRevisions() { ui.value = ui.value.copy(revisions = null) }
+ fun saveEditorial(@Header("Authorization") bearer: String, @Body value: StudioEditorialRequest)
  @POST("api/v1/telegram-pair") suspend fun telegram(@Header("Authorization") bearer: String, @Body value: StudioTelegramRequest): StudioTelegramStatus
  @GET("api/v1/assets") suspend fun media(@Header("Authorization") bearer:String,@Query("cursor") cursor:String?):WriterMediaLibrary
  @POST("api/v1/media-delete") suspend fun removeMedia(@Header("Authorization") bearer:String,@Body value:MediaDeleteRequest)
@@ -68,6 +89,7 @@ interface WriterApi {
 
 data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val restoring:Boolean=true,val error:String="",
  val editorial: StudioEditorial? = null, val telegram: StudioTelegramStatus? = null,
+ val revisions: List<StudioRevision>? = null, val editorGeneration: Int = 0,
  val studio:String="articles",val notice:String="",val media:List<WriterMedia> = emptyList(),val mediaCursor:String?=null,val pendingMedia:List<WriterPendingMedia> = emptyList(),val profiles:List<WriterProfile> = emptyList(),val progress:Int?=null,val articles:List<ArticleDto> = emptyList(),val editing:ArticleDto?=null,val editorOpen:Boolean=false)
 
 @HiltViewModel class WriterViewModel @Inject constructor(
@@ -150,10 +172,10 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   }
  }
  fun edit(value:ArticleDto?){
-  ui.value=ui.value.copy(editing=value,editorOpen=true,error="")
+  ui.value=ui.value.copy(editing=value,editorOpen=true,error="",revisions=null)
   viewModelScope.launch { try{ui.value=ui.value.copy(profiles=api.authors().authors)}catch(_:java.io.IOException){}catch(_:retrofit2.HttpException){} }
  }
- fun closeEditor(){ui.value=ui.value.copy(editorOpen=false,error="")}
+ fun closeEditor(){ui.value=ui.value.copy(editorOpen=false,error="",revisions=null)}
  fun save(value:ArticleDto){
   viewModelScope.launch{
    ui.value=ui.value.copy(busy=true,error="")
@@ -285,7 +307,11 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    Row(verticalAlignment=Alignment.CenterVertically){Text("تذكر دخولي بأمان على هذا الجهاز (30 يومًا)",Modifier.weight(1f));Switch(remember,onCheckedChange={remember=it})}
    Button(onClick={vm.login(email,password,remember);password=""},enabled=!state.busy&&email.isNotBlank()&&password.isNotBlank()){Text("دخول الكاتب")}
   } else if(state.editorOpen){
-   WriterEditor(state.editing,remember(state.editing?.id){vm.recovery(state.editing?.id)},vm::keepDraft,state.profiles,state.busy,vm::save,vm::closeEditor,vm::delete,vm::uploadMedia)
+   key(state.editing?.id, state.editorGeneration) {
+    WriterEditor(state.editing, remember { vm.recovery(state.editing?.id) }, vm::keepDraft, state.profiles, state.busy,
+     vm::save, vm::closeEditor, vm::delete, vm::uploadMedia, vm::loadRevisions)
+   }
+   state.revisions?.let { WriterRevisionDialog(it, vm::restoreRevision, vm::closeRevisions) }
   } else if(state.studio=="media"){NativeMediaLibrary(state,vm::loadMedia,vm::deleteMedia)}
   else if(state.studio=="authors"){NativeAuthorManager(state,vm::saveProfile,vm::uploadMedia)}
   else if (state.studio == "editorial") { WriterEditorial(state.editorial, state.busy, vm::reload, vm::saveEditorial) }
@@ -322,7 +348,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  }
 }
 
-@Composable private fun WriterEditor(original:ArticleDto?,recovered:ArticleDto?,keep:(String?,ArticleDto)->Unit,profiles:List<WriterProfile>,busy:Boolean,save:(ArticleDto)->Unit,cancel:()->Unit,delete:(String)->Unit,uploadMedia:(Uri,String,(String)->Unit)->Unit){
+@Composable private fun WriterEditor(original:ArticleDto?,recovered:ArticleDto?,keep:(String?,ArticleDto)->Unit,profiles:List<WriterProfile>,busy:Boolean,save:(ArticleDto)->Unit,cancel:()->Unit,delete:(String)->Unit,uploadMedia:(Uri,String,(String)->Unit)->Unit,loadRevisions:()->Unit){
  val initial=recovered?:original
  var title by rememberSaveable(initial?.id){mutableStateOf(initial?.title.orEmpty())}
  var author by rememberSaveable(initial?.id){mutableStateOf(initial?.author?:"معتز العلقمي")}
@@ -369,6 +395,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  var confirmPublish by remember{mutableStateOf(false)}
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)){
   Text(if(original==null)"مقال جديد" else "تعديل المقال",style=MaterialTheme.typography.titleLarge)
+  if (original != null) OutlinedButton(onClick = loadRevisions, enabled = !busy) { Text("عرض نسخ المقالة السابقة") }
   OutlinedTextField(title,{title=it.take(220)},label={Text("العنوان")},modifier=Modifier.fillMaxWidth())
   if(profiles.isNotEmpty())Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)){
    profiles.forEach { profile -> FilterChip(selected=selectedAuthor==profile.id,onClick={

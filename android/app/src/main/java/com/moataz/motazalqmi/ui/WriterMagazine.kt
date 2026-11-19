@@ -13,11 +13,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.moataz.motazalqmi.R
 import com.moataz.motazalqmi.data.QuoteDto
+import com.moataz.motazalqmi.data.ArticleDto
+import androidx.compose.foundation.lazy.items
 
 data class StudioSite(val tagline: String = "", val about: String = "")
 data class StudioEditorial(val site: StudioSite = StudioSite(), val quotes: List<QuoteDto> = emptyList())
 data class StudioEditorialFields(val tagline: String, val about: String, val quotes: List<QuoteDto>)
 data class StudioEditorialRequest(val action: String = "editorial", val editorial: StudioEditorialFields)
+data class StudioRevision(val id: String = "", val savedAt: String = "", val data: ArticleDto = ArticleDto())
+data class StudioRevisionList(val revisions: List<StudioRevision> = emptyList())
 data class StudioTelegramRequest(val action: String)
 data class StudioTelegramBot(val username: String = "")
 data class StudioTelegramWebhook(val active: Boolean = false, val hasRecentError: Boolean = false, val pendingUpdates: Int = 0)
@@ -90,5 +94,27 @@ data class StudioTelegramStatus(val configured: Boolean = false, val linkedAccou
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://motazalqmi.vercel.app/admin"))) }
             }) { Text("الربط والإعداد من لوحة الموقع") }
         }
+    }
+}
+
+@Composable internal fun WriterRevisionDialog(revisions: List<StudioRevision>, restore: (StudioRevision) -> Unit, close: () -> Unit) {
+    var selected by remember { mutableStateOf<StudioRevision?>(null) }
+    AlertDialog(onDismissRequest = close, title = { Text("نسخ المقالة السابقة") },
+        text = {
+            if (revisions.isEmpty()) Text("لا توجد نسخ أقدم.")
+            else LazyColumn(Modifier.heightIn(max = 280.dp)) {
+                items(revisions, key = { it.id }) { revision ->
+                    TextButton(onClick = { selected = revision }) {
+                        Text("${revision.data.title} · ${revision.savedAt.take(16).replace('T', ' ')}")
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = close) { Text("إغلاق") } })
+    selected?.let { revision ->
+        AlertDialog(onDismissRequest = { selected = null }, title = { Text("استعادة هذه النسخة إلى المحرر؟") },
+            text = { Text("تستبدل الاستعادة مسودة العمل المفتوحة. تُحفظ التغييرات في الموقع بعد الضغط على حفظ أو نشر.") },
+            confirmButton = { TextButton(onClick = { restore(revision) }) { Text("تأكيد الاستعادة") } },
+            dismissButton = { TextButton(onClick = { selected = null }) { Text("إلغاء") } })
     }
 }

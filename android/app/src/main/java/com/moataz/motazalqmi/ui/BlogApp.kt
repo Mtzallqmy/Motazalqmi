@@ -256,7 +256,11 @@ internal fun share(context: android.content.Context, text: String) {
   }
  }
  val ink = MaterialTheme.colorScheme.onBackground.toArgb()
- val fontId = when (settings.font) { "amiri" -> R.font.amiri; "plex" -> R.font.plex; else -> R.font.naskh }
+ val chosenFont = if (settings.font == "editor") a.fontFamily else settings.font
+ val fontId = when (chosenFont) { "amiri" -> R.font.amiri; "plex", "tajawal" -> R.font.plex; else -> R.font.naskh }
+ val size = if (settings.useArticleSize) a.fontSize.toFloat().coerceIn(16f, 34f) else settings.size
+ val maxWidth = when (settings.textWidth) { "narrow" -> 470.dp; "wide" -> 800.dp; else -> 640.dp }
+ val gutter = when (settings.textWidth) { "narrow" -> 35.dp; "wide" -> 16.dp; else -> 24.dp }
  LaunchedEffect(a.id) {
   snapshotFlow { scroll.value to scroll.maxValue }.debounce(500).collect { (offset, max) ->
    if (restored && max > 0 && max < Int.MAX_VALUE) vm.position(a.id, 0, offset, offset.toFloat() / max)
@@ -277,12 +281,12 @@ internal fun share(context: android.content.Context, text: String) {
   Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
    TextButton(onClick = { focus = !focus }) { Text(if (focus) "إظهار الأدوات" else "قراءة مركزة") }
    if (!focus) {
-    IconButton(onClick = { vm.configure(settings.copy(size = (settings.size - 1).coerceAtLeast(16f))) }) { Icon(Icons.Default.TextDecrease, "تصغير الخط") }
-    IconButton(onClick = { vm.configure(settings.copy(size = (settings.size + 1).coerceAtMost(34f))) }) { Icon(Icons.Default.TextIncrease, "تكبير الخط") }
+    IconButton(onClick = { vm.configure(settings.copy(size = (size - 1).coerceAtLeast(16f), useArticleSize = false)) }) { Icon(Icons.Default.TextDecrease, "تصغير الخط") }
+    IconButton(onClick = { vm.configure(settings.copy(size = (size + 1).coerceAtMost(34f), useArticleSize = false)) }) { Icon(Icons.Default.TextIncrease, "تكبير الخط") }
     IconButton(onClick = { vm.configure(settings.copy(theme = if (settings.theme == "dark") "light" else "dark")) }) { Icon(Icons.Default.DarkMode, "تبديل وضع القراءة الليلي") }
    }
   }
-  Column(Modifier.weight(1f).verticalScroll(scroll).padding(horizontal = 24.dp, vertical = 16.dp)) {
+  Column(Modifier.weight(1f).align(Alignment.CenterHorizontally).widthIn(max = maxWidth).fillMaxWidth().verticalScroll(scroll).padding(horizontal = gutter, vertical = 16.dp)) {
    if (a.id !in library.available) Text("نسخة محفوظة؛ هذا المقال لم يعد منشورًا على الموقع.", color = MaterialTheme.colorScheme.secondary)
    TextButton(onClick = { section(a.category) }) { MagazineIcon(sectionIcon(a.category)); Spacer(Modifier.width(7.dp)); Text(library.sections.find { it.id == a.category }?.title.orEmpty()) }
    Text(a.title, Modifier.padding(vertical = 18.dp), fontFamily = Amiri, fontSize = 32.sp, lineHeight = 48.sp)
@@ -326,6 +330,7 @@ internal fun share(context: android.content.Context, text: String) {
      } else if (!part.text.isNullOrBlank()) {
       val partContent = part.text.orEmpty()
       val parsed = remember(partContent) { engine.renderer.render(engine.renderer.parse(partContent)) }
+      val spaced = remember(parsed, settings.paragraphSpacing) { spaceReaderParagraphs(parsed, settings.paragraphSpacing) }
       AndroidView(factory = { TextView(it).apply {
        textDirection = android.view.View.TEXT_DIRECTION_FIRST_STRONG_RTL
        layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
@@ -334,9 +339,11 @@ internal fun share(context: android.content.Context, text: String) {
       } }, modifier = Modifier.fillMaxWidth(), update = { view ->
        view.setTextColor(ink); view.setLinkTextColor(MaterialColors.link)
        view.typeface = ResourcesCompat.getFont(context, fontId) ?: Typeface.DEFAULT
-       view.textSize = settings.size
+       view.textSize = size
+       view.gravity = if (settings.alignment == "center") android.view.Gravity.CENTER_HORIZONTAL else android.view.Gravity.START
+       view.justificationMode = if (settings.alignment == "justify") android.text.Layout.JUSTIFICATION_MODE_INTER_WORD else android.text.Layout.JUSTIFICATION_MODE_NONE
        view.setLineSpacing(0f, settings.spacing)
-       if (view.tag !== parsed) { engine.renderer.setParsedMarkdown(view, parsed); view.tag = parsed }
+       if (view.tag !== spaced) { engine.renderer.setParsedMarkdown(view, spaced); view.tag = spaced }
       })
      }
     }
@@ -365,7 +372,7 @@ internal fun share(context: android.content.Context, text: String) {
    HorizontalDivider(); Text("برمجة وتطوير: معتز العلقمي — تعز — اليمن — 2026م", Modifier.padding(vertical = 24.dp), style = MaterialTheme.typography.bodyMedium)
   }
  }
- if (showSettings) ReaderSettingsSheet(settings, vm::configure) { showSettings = false }
+ if (showSettings) ReaderSettingsSheet(settings, vm::configure, focus, { focus = it }) { showSettings = false }
  if (showIndex) AlertDialog(onDismissRequest = { showIndex = false }, title = { Text("فهرس المقالة") },
   text = { Column(Modifier.verticalScroll(rememberScrollState())) {
    headings.forEach { (index, title) -> TextButton(onClick = {
