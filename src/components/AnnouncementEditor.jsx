@@ -42,7 +42,7 @@ export function AnnouncementEditor({ticker, save}) {
           <label>النوع <select value={item.kind} onChange={e => updateItem(index,{kind:e.target.value})}>
             {Object.entries(TICKER_LABELS).map(([id,label]) => <option value={id} key={id}>{label}</option>)}
           </select></label>
-          <label>النص<textarea rows={2} value={item.text} maxLength={200} required onChange={e => updateItem(index,{text:e.target.value})}/></label>
+          <label>النص<textarea aria-label={`نص العبارة ${index + 1}`} rows={2} value={item.text} maxLength={200} required onChange={e => updateItem(index,{text:e.target.value})}/></label>
           <label>الرابط (اختياري)<input dir="ltr" placeholder="https://… أو /articles/…" value={item.link} maxLength={2048} onChange={e => updateItem(index,{link:e.target.value})}/></label>
           <button type="button" className="text-rust underline" onClick={() => setDraft({...draft,items:draft.items.filter((_,key) => key !== index)})}>إزالة العبارة</button>
         </fieldset>)}

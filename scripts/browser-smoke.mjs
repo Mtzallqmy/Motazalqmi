@@ -51,7 +51,7 @@ try {
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.reload();
  await body.waitFor();assert.equal(await body.inputValue(),'نص اختبار محفوظ محليًا');assert.equal(await page.getByLabel('موعد النشر',{exact:true}).inputValue(),'2027-01-20T20:30');
  await page.getByRole('button',{name:'تحرير شريط الإعلانات'}).click();
- await page.getByLabel('النص',{exact:true}).first().fill('إعلان محدّث من لوحة الكاتب');
+ await page.locator('.announcement-item textarea').first().fill('إعلان محدّث من لوحة الكاتب');
  await page.getByRole('button',{name:'حفظ الشريط'}).click();
  await page.getByText('حُفظ شريط الإعلانات.').waitFor();
  assert.equal(ticker.items[0].text,'إعلان محدّث من لوحة الكاتب');
