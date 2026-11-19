@@ -1,7 +1,8 @@
+import {AnnouncementTicker} from '../components/AnnouncementTicker';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, BookOpen, RotateCcw } from 'lucide-react';
-import { ARTICLE_CATEGORIES, getCategory } from '../data/categories';
+import { ARTICLE_CATEGORIES, PRIMARY_TOPICS, getCategory } from '../data/categories';
 import { useArticles } from '../hooks/useArticles';
 import { ArticleCard } from '../components/ArticleCard';
 import { EmptyState } from '../components/Ornaments';
@@ -9,7 +10,7 @@ import { articlePath, formatDate } from '../lib/format';
 import { normalizeArabic } from '../../shared/arabicSearch';
 
 export function HomePage(interactions) {
-  const { published, quotes, loading, error, site } = useArticles();
+  const { published, quotes, loading, error, site, ticker } = useArticles();
   const [params] = useSearchParams();
   const term = params.get('q')?.trim() || '';
   const [category, setCategory] = useState('');
@@ -26,8 +27,10 @@ export function HomePage(interactions) {
   }, [published, category, term, order]);
   return <div className="edition">
     {!term && <>
-      <header className="masthead"><span>{site?.tagline}</span><h1>مدونة معتز العلقمي</h1></header>
-      <nav className="edition-doors" aria-label="أبواب المجلة">{ARTICLE_CATEGORIES.map(c=><Link key={c.id} to={'/category/'+c.id}>{c.title}</Link>)}</nav>
+      <header className="masthead"><span>{site?.tagline}</span><h1>مدونة معتز العلقمي</h1><p>أدب وإنسان وثقافة ودين ولغة عربية</p></header>
+      <AnnouncementTicker ticker={ticker}/>
+      <nav className="edition-topics" aria-label="الأبواب الرئيسية">{PRIMARY_TOPICS.map(({id,title,icon:Icon}) =>
+        <Link key={id} to={'/category/'+id}><Icon size={21} aria-hidden="true"/><span>{title}</span></Link>)}</nav>
       {lead && <section className="lead-story">
         <div className="lead-text"><Link className="section-name" to={'/category/' + lead.category}>{getCategory(lead.category).title}</Link>
           <h2><Link to={articlePath(lead)}>{lead.title}</Link></h2>

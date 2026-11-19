@@ -10,8 +10,16 @@ try {
  const future={...seed.articles[0],id:'scheduled-browser',slug:'scheduled-browser',title:'مقالة مستقبلية لا تظهر قبل موعدها',scheduledAt:'2027-12-01T10:00:00.000Z'};
  seed.articles.push(future);
  let admin=false;
+ let ticker={enabled:true,intervalSeconds:8,items:[{kind:'update',text:'شريط الاختبار الأول',link:''},{kind:'announcement',text:'شريط الاختبار الثاني',link:''}]};
  await page.route('**/api/session',route=>route.fulfill({json:{user:admin?{email:'editor@example.invalid'}:null}}));
- await page.route('**/api/articles*',route=>route.fulfill({json:{articles:seed.articles,editorial:seed}}));
+ await page.route('**/api/articles*',route=>{
+  if(route.request().method()==='POST'){
+   const input=route.request().postDataJSON();
+   assert.equal(input.action,'announcement-ticker'); ticker=input.ticker;
+   return route.fulfill({json:{ticker}});
+  }
+  return route.fulfill({json:{articles:seed.articles,editorial:seed,ticker}});
+ });
  await page.route('**/api/v1/assets*',route=>route.fulfill({json:{items:[{url:'https://example123.public.blob.vercel-storage.com/media/test.pdf',pathname:'media/test.pdf',size:200}],pendingDeletions:[]}}));
  await page.route('**/api/v1/media-delete',route=>route.fulfill({status:409,json:{error:'الملف مستخدم في المحتوى أو مراجعاته.',references:[{title:'مقالة تستخدم الملف'}]}}));
  await page.route('**/api/v1/authors',route=>route.fulfill({json:{authors:[]}}));
@@ -19,6 +27,10 @@ try {
  await page.locator('.lead-text h2 a').waitFor();
  assert.equal(await page.getByText(future.title,{exact:true}).count(),0);
  assert(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth));
+ await page.getByText('شريط الاختبار الأول').waitFor();
+ await page.getByRole('button',{name:'الإعلان التالي'}).click();
+ await page.getByText('شريط الاختبار الثاني').waitFor();
+ assert.equal(await page.getByRole('navigation',{name:'الأبواب الرئيسية'}).getByRole('link').count(),5);
  await page.screenshot({path:'mobile-home.png',animations:'disabled'});
  await page.locator('.lead-text h2 a').click();
  await page.locator('.reader-controls summary').click();
@@ -38,6 +50,11 @@ try {
  const body=page.locator('#article-content');await body.waitFor();await body.fill('نص اختبار محفوظ محليًا');await page.getByLabel('موعد النشر',{exact:true}).fill('2027-01-20T20:30');
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.reload();
  await body.waitFor();assert.equal(await body.inputValue(),'نص اختبار محفوظ محليًا');assert.equal(await page.getByLabel('موعد النشر',{exact:true}).inputValue(),'2027-01-20T20:30');
+ await page.getByRole('button',{name:'تحرير شريط الإعلانات'}).click();
+ await page.getByLabel('النص',{exact:true}).first().fill('إعلان محدّث من لوحة الكاتب');
+ await page.getByRole('button',{name:'حفظ الشريط'}).click();
+ await page.getByText('حُفظ شريط الإعلانات.').waitFor();
+ assert.equal(ticker.items[0].text,'إعلان محدّث من لوحة الكاتب');
  await page.locator('.studio-tools summary').click();await page.getByRole('button',{name:'عرض مكتبة الوسائط',exact:true}).click();
  page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'حذف من المخزن',exact:true}).click();
  await page.getByText(/الملف مستخدم في المحتوى/).waitFor();assert.equal(await page.getByRole('button',{name:'إدراج في النص',exact:true}).count(),1);

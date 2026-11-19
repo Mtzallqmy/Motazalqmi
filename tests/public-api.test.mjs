@@ -14,7 +14,7 @@ function fake(req={}){
 }
 test('API v1 metadata is complete and stable',async()=>{
  assert.equal(SITE.id,'motazalqmi');
- assert.equal(SECTIONS.length,8);
+ for (const id of ['human','culture','faith','language']) assert.ok(SECTIONS.some(section => section.id === id));
  assert.equal(new Set(SECTIONS.map(c=>c.id)).size,SECTIONS.length);
  assert.ok(QUOTES.length>=4);
  for(const handler of [categories,about,quotes]){const x=fake();await handler(x.req,x.res);assert.equal(x.res.statusCode,200);assert.equal(JSON.parse(x.res.body).apiVersion,1);assert.match(x.headers.etag,/^"/)}

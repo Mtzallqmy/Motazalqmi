@@ -1,4 +1,5 @@
-import { editorial } from '../server/editorial.js';
+import { normalizeTicker, tickerForAudience } from '../shared/announcementTicker.js';
+import { editorial, publicEditorial } from '../server/editorial.js';
 import { randomUUID } from 'node:crypto';
 import { checkOrigin,getAdmin,noCache } from '../server/auth.js';
 import { database,articleRow,normalizeArticle } from '../server/db.js';
@@ -11,16 +12,29 @@ export default async function handler(req,res){
  try{
   const sql=database();
   if(req.method==='GET'){
-   const list=req.query.scope==='admin'
-      ?await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles ORDER BY publish_date DESC,updated_at DESC LIMIT 500`
-      :await sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_published_articles WHERE status='published' ORDER BY publish_date DESC,updated_at DESC LIMIT 500`;
-   return res.status(200).json({articles:list.map(articleRow),editorial:await editorial()});
+   const articles = req.query.scope === 'admin'
+      ?sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles ORDER BY publish_date DESC,updated_at DESC LIMIT 500`
+      :sql`SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_published_articles WHERE status='published' ORDER BY publish_date DESC,updated_at DESC LIMIT 500`;
+   const [list, metadata] = await Promise.all([
+    articles, sql`SELECT id,data FROM blog_public_metadata WHERE id IN ('editorial','announcement_ticker')`
+   ]);
+   const record = id => metadata.find(entry => entry.id === id)?.data;
+   return res.status(200).json({articles:list.map(articleRow),editorial:publicEditorial(record('editorial')),
+    ticker:tickerForAudience(record('announcement_ticker'), req.query.scope==='admin')});
   }
   if(JSON.stringify(req.body||'').length>240000)return res.status(413).json({error:'المقالة تتجاوز الحد المسموح.'});
+  if (req.body.action === 'announcement-ticker') {
+   let ticker;
+   try { ticker = normalizeTicker(req.body.ticker); }
+   catch (e) { return res.status(400).json({error:e.message}); }
+   await sql`INSERT INTO blog_public_metadata(id,data) VALUES ('announcement_ticker',${JSON.stringify(ticker)}::jsonb)
+    ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()`;
+   return res.status(200).json({ticker});
+  }
   if(req.body.action==='editorial'){
    const input=req.body.editorial;
    if(!input||typeof input!=='object'||Array.isArray(input))return res.status(400).json({error:'إعدادات غير صالحة.'});
-   const current=await editorial();
+   const current=await editorial(sql);
    const tagline=input.tagline,about=input.about;
    if(typeof tagline!=='string'||tagline.trim().length<3||tagline.length>240||
       typeof about!=='string'||about.trim().length<10||about.length>12000)

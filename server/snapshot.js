@@ -1,6 +1,7 @@
+import {tickerForAudience} from '../shared/announcementTicker.js';
 import { createHash } from 'node:crypto';
 import { database, articleRow } from './db.js';
-import { SITE, SECTIONS, QUOTES } from '../shared/publicContent.js';
+import { publicEditorial } from './editorial.js';
 
 // One PostgreSQL statement gives all rows and metadata a single MVCC snapshot.
 // Fail closed on size limits: a partial page must NEVER authorize local deletion.
@@ -10,6 +11,7 @@ export async function publishedSnapshot(sql = database()) {
    WHERE status='published' ORDER BY publish_date DESC,id LIMIT 2001
   ) SELECT COALESCE(jsonb_agg(to_jsonb(published) ORDER BY publish_date DESC,id),'[]'::jsonb) AS articles,
   (SELECT data FROM blog_public_metadata WHERE id='editorial') AS metadata,
+  (SELECT data FROM blog_public_metadata WHERE id='announcement_ticker') AS ticker,
   (SELECT COALESCE(jsonb_agg(jsonb_build_object(
      'id',data->>'id','name',data->>'name','bio',coalesce(data->>'bio',''),
      'image',coalesce(data->>'image',''),'link',coalesce(data->>'link','')) ORDER BY id),'[]'::jsonb)
@@ -17,9 +19,9 @@ export async function publishedSnapshot(sql = database()) {
   FROM published`;
  const rows = result.articles;
  if (!Array.isArray(rows) || rows.length > 2000) throw new Error('Snapshot limit exceeded');
- const metadata = result.metadata || {site:SITE,sections:SECTIONS,quotes:QUOTES};
+ const metadata = result.metadata;
  const payload = {apiVersion:1,mode:'snapshot',complete:true,
-  site:metadata.site, sections:metadata.sections, quotes:metadata.quotes, authors:result.authors || [],
+  ...publicEditorial(metadata), authors:result.authors || [], ticker:tickerForAudience(result.ticker),
   articles:rows.map(r=>({...articleRow(r),updatedAt:r.updated_at})),total:rows.length};
  if (Buffer.byteLength(JSON.stringify(payload)) > 3 * 1024 * 1024) throw new Error('Snapshot response too large');
  payload.revision=createHash('sha256').update(JSON.stringify(payload)).digest('hex');

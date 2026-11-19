@@ -1,3 +1,4 @@
+import {AnnouncementEditor} from '../components/AnnouncementEditor';
 import {isScheduled,publicationLabel} from '../../shared/publication';
 import {normalizeArabic} from '../../shared/arabicSearch';
 import {StudioTools} from '../components/StudioTools';
@@ -36,7 +37,7 @@ function localeToday() {
 }
 
 export function DashboardPage() {
-  const { articles, save, remove, isDemo, importExamples, site, quotes, saveEditorial } = useArticles();
+  const { articles, save, remove, isDemo, importExamples, site, quotes, saveEditorial, ticker, saveTicker } = useArticles();
   const { logout, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [editingId, setEditingId] = useState(null);
@@ -159,7 +160,9 @@ export function DashboardPage() {
     </header>
     <div className="studio-overview" aria-label="إحصاء المحتوى">
       {[[articles.length,'جميع الكتابات'],[articles.filter(a=>a.status==='published'&&!isScheduled(a)).length,'منشور'],[articles.filter(a=>a.status==='draft').length,'مسودة'],[articles.filter(a=>isScheduled(a)).length,'مجدول']].map(([n,label])=><div key={label}><strong>{n}</strong><span>{label}</span></div>)}
-    </div><TelegramAdmin/>
+    </div>
+    <AnnouncementEditor ticker={ticker} save={saveTicker}/>
+    <TelegramAdmin/>
     {isDemo && <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#F4ECE1] border border-gold/40 p-5"><p className="text-sm">المقالات الحالية أمثلة تجريبية. استوردها إلى Neon إن رغبت في إدارتها، أو ابدأ بكتابة مقالة جديدة.</p><button disabled={busy} onClick={handleImport} className="bg-teal text-white rounded-xl px-5 py-2.5 font-bold text-sm inline-flex items-center gap-2"><Upload size={17}/> استيراد الأمثلة السبعة</button></div>}
     {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 text-red-800 border border-red-200 p-4">{error}</p>}
     {success && <p role="status" className="mt-5 rounded-xl bg-cream text-teal border border-gold/30 p-4">{success}</p>}

@@ -4,7 +4,7 @@ export const SITE = Object.freeze({
   id: 'motazalqmi',
   name: 'مدونة معتز العلقمي',
   tagline: 'حيث تلتقي الكلمة بالفكر، ويزهر الأدب',
-  description: 'مدونة ثقافية تهتم باللغة والأدب والتاريخ والفكر والشعر العربي.',
+  description: 'مدونة أدبية وإنسانية وثقافية ودينية ولغوية، تنشر مقالات وقراءات وتأملات بالعربية.',
   owner: 'معتز العلقمي',
   credit: 'برمجة وتطوير معتز العلقمي – تعز – اليمن – 2026م',
   officialUrl: 'https://motazalqmi.vercel.app',
@@ -20,6 +20,10 @@ export const SECTIONS = Object.freeze([
   {id:'news',title:'أحاديث وأخبار',subtitle:'موضوعات ثقافية وأخبار أدبية ومحطات تاريخية'},
   {id:'wisdom',title:'حكم ومواعظ',subtitle:'درر الحكمة والتجارب الإنسانية العميقة عبر العصور'},
   {id:'arabic_lit',title:'أدبنا العربي',subtitle:'الشعر العربي واللغة والبلاغة والأدباء والتراث'},
+  {id:'human',title:'الإنسان والحياة',subtitle:'تجارب الناس وقصصهم وأسئلة الحياة والمجتمع'},
+  {id:'culture',title:'ثقافة وفكر',subtitle:'قراءات في الأفكار والتاريخ والفنون وما يثري الحوار'},
+  {id:'faith',title:'دين وقيم',subtitle:'تأملات إيمانية وقراءات في السيرة والأخلاق والقيم'},
+  {id:'language',title:'لغتنا العربية',subtitle:'البيان والبلاغة والنحو واستعمال العربية في الكتابة والحياة'},
   {id:'about',title:'حول المدونة',subtitle:'تعريف برسالة المدونة وصاحبها وأهدافها الثقافية'}
 ]);
 export const QUOTES = Object.freeze([
@@ -28,3 +32,13 @@ export const QUOTES = Object.freeze([
   {text:'البيانُ بصرٌ، والعيُّ عمى، كما أنَّ العلمَ بصرٌ والجهلَ عمى.',author:'أبو عثمان الجاحظ',source:'البيان والتبيين'},
   {text:'وما الفضلُ إلا لأهلِ العلمِ إنَّهمُ ... على الهُدى لِمَنِ استهدى أدلّاءُ',author:'يُنسب إلى الإمام الشافعي',source:'منسوب إلى ديوانه'}
 ]);
+
+// Existing metadata rows predate new doors. Preserve their labels and add missing public categories.
+export function editorialSections(stored) {
+  if (!Array.isArray(stored)) return SECTIONS;
+  const known = new Map(stored.filter(section => typeof section?.id === 'string').map(section => [section.id, section]));
+  const sections = SECTIONS.map(section => ({...section, ...known.get(section.id)}));
+  const standardIds = new Set(SECTIONS.map(section => section.id));
+  const extra = [...known.values()].filter(section => !standardIds.has(section.id));
+  return [...sections.slice(0, -1), ...extra, sections.at(-1)];
+}

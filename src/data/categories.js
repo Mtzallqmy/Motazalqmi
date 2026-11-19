@@ -1,4 +1,4 @@
-import { Feather, Quote, BookOpen, Sparkles, Compass, Scroll, Landmark, UserCheck } from 'lucide-react';
+import { Feather, Quote, BookOpen, Sparkles, Compass, Scroll, Landmark, UserCheck, HeartHandshake, LibraryBig, BookHeart, Languages } from 'lucide-react';
 import { SECTIONS } from '../../shared/publicContent.js';
 
 // Titles/descriptions have a single source of truth for website, API, and Android.
@@ -10,8 +10,14 @@ const DESIGN = {
   news: { icon: Compass, color: 'from-[#7D5A50] to-[#604239]' },
   wisdom: { icon: Scroll, color: 'from-[#B8860B] to-[#996515]' },
   arabic_lit: { icon: Landmark, color: 'from-[#0A484E] to-[#062F33]' },
+  human: { icon: HeartHandshake, color: 'from-[#804638] to-[#633128]' },
+  culture: { icon: LibraryBig, color: 'from-[#396159] to-[#20453D]' },
+  faith: { icon: BookHeart, color: 'from-[#645322] to-[#493B17]' },
+  language: { icon: Languages, color: 'from-[#494A69] to-[#30344E]' },
   about: { icon: UserCheck, color: 'from-[#2C2523] to-[#1A1615]' }
 };
 export const CATEGORIES = SECTIONS.map(section=>({ ...section,...DESIGN[section.id] }));
 export const getCategory = id => CATEGORIES.find(c=>c.id===id) ?? CATEGORIES[0];
 export const ARTICLE_CATEGORIES = CATEGORIES.filter(c=>c.id!=='about');
+
+export const PRIMARY_TOPICS = ['arabic_lit', 'human', 'culture', 'faith', 'language'].map(getCategory);
