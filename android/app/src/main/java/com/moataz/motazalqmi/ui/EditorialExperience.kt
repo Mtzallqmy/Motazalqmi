@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,7 +39,11 @@ private val ShelfSections = listOf("books", "arabic_lit")
     var quoteIndex by rememberSaveable { mutableIntStateOf(0) }
     val articles = remember(published, category, order) { orderArticles(published.filter { category.isEmpty() || it.category == category }, order) }
     val quote = library.quotes.getOrNull(quoteIndex % library.quotes.size.coerceAtLeast(1))
-    LazyColumn(Modifier.fillMaxSize().testTag("home-feed"), contentPadding = PaddingValues(18.dp),
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val topics = listOf("arabic_lit", "human", "culture", "faith", "language").mapNotNull { id -> library.sections.firstOrNull { it.id == id } }
+    val tickerVisible = library.ticker.enabled && library.ticker.items.isNotEmpty()
+    LazyColumn(Modifier.fillMaxSize().testTag("home-feed"), state = listState, contentPadding = PaddingValues(18.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item {
             Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -50,7 +56,15 @@ private val ShelfSections = listOf("books", "arabic_lit")
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }
-        item { SectionDoors(library.sections, open = section) }
+        if (tickerVisible) item {
+            MagazineTicker(library.ticker, openArticle = { slug ->
+                val article = published.find { it.slug == slug }
+                if (article == null) false else { open(article.id); true }
+            }, openSection = section, latest = {
+                scope.launch { listState.animateScrollToItem(if (lead == null) 3 else 4) }
+            })
+        }
+        item { SectionDoors(topics.ifEmpty { library.sections }, open = section) }
         if (lead != null) item {
             Card(onClick = { open(lead.id) }, modifier = Modifier.fillMaxWidth().testTag("featured-article-${lead.id}"),
                 shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {

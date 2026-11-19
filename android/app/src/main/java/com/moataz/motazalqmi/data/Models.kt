@@ -15,11 +15,13 @@ data class ArticleDto(
 data class AuthorProfileDto(val id: String = "", val name: String = "", val bio: String = "", val image: String = "", val link: String = "")
 data class SectionDto(val id: String = "", val title: String = "", val subtitle: String = "")
 data class QuoteDto(val id: String = "", val text: String = "", val author: String = "", val source: String = "")
+data class AnnouncementDto(val kind: String = "update", val text: String = "", val link: String = "")
+data class TickerDto(val enabled: Boolean = false, val intervalSeconds: Int = 8, val items: List<AnnouncementDto> = emptyList())
 data class Snapshot(
  val apiVersion: Int = 0, val mode: String = "snapshot", val complete: Boolean = false,
  val articles: List<ArticleDto> = emptyList(), val sections: List<SectionDto> = emptyList(),
  val quotes: List<QuoteDto> = emptyList(), val site: Map<String, Any> = emptyMap(), val total: Int = 0,
- val authors: List<AuthorProfileDto> = emptyList()
+ val authors: List<AuthorProfileDto> = emptyList(), val ticker: TickerDto? = null
 )
 @Entity(tableName = "articles")
 data class ArticleEntity(@PrimaryKey val id: String, val payload: String, val available: Boolean = true)

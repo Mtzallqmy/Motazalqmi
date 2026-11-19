@@ -115,7 +115,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
     composable("settings") { SettingsPage(settings, library.syncedAt, busy, vm::configure, vm::sync, vm::clean, { openSection("about") }, openWriter) }
     composable("writer") {
      val writer = androidx.hilt.navigation.compose.hiltViewModel<WriterViewModel>()
-     WriterPanel(writer) { nav.popBackStack() }
+     WriterPanel(writer, library.sections) { nav.popBackStack() }
     }
     composable("author/{key}", arguments = listOf(navArgument("key") { type = NavType.StringType })) { entry ->
      MagazineAuthor(entry.arguments?.getString("key").orEmpty(), library, settings, openArticle)

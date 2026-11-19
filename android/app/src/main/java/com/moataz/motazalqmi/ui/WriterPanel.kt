@@ -274,7 +274,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  override fun onCleared(){token=null;super.onCleared()}
 }
 
-@Composable fun WriterPanel(vm:WriterViewModel, back:()->Unit){
+@Composable fun WriterPanel(vm:WriterViewModel, sections: List<com.moataz.motazalqmi.data.SectionDto>, back:()->Unit){
  val state by vm.ui.collectAsState()
  var email by remember{mutableStateOf("")}
  var password by remember{mutableStateOf("")}
@@ -308,7 +308,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    Button(onClick={vm.login(email,password,remember);password=""},enabled=!state.busy&&email.isNotBlank()&&password.isNotBlank()){Text("دخول الكاتب")}
   } else if(state.editorOpen){
    key(state.editing?.id, state.editorGeneration) {
-    WriterEditor(state.editing, remember { vm.recovery(state.editing?.id) }, vm::keepDraft, state.profiles, state.busy,
+    WriterEditor(state.editing, remember { vm.recovery(state.editing?.id) }, vm::keepDraft, state.profiles, sections, state.busy,
      vm::save, vm::closeEditor, vm::delete, vm::uploadMedia, vm::loadRevisions)
    }
    state.revisions?.let { WriterRevisionDialog(it, vm::restoreRevision, vm::closeRevisions) }
@@ -348,7 +348,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
  }
 }
 
-@Composable private fun WriterEditor(original:ArticleDto?,recovered:ArticleDto?,keep:(String?,ArticleDto)->Unit,profiles:List<WriterProfile>,busy:Boolean,save:(ArticleDto)->Unit,cancel:()->Unit,delete:(String)->Unit,uploadMedia:(Uri,String,(String)->Unit)->Unit,loadRevisions:()->Unit){
+@Composable private fun WriterEditor(original:ArticleDto?,recovered:ArticleDto?,keep:(String?,ArticleDto)->Unit,profiles:List<WriterProfile>,sections:List<com.moataz.motazalqmi.data.SectionDto>,busy:Boolean,save:(ArticleDto)->Unit,cancel:()->Unit,delete:(String)->Unit,uploadMedia:(Uri,String,(String)->Unit)->Unit,loadRevisions:()->Unit){
  val initial=recovered?:original
  var title by rememberSaveable(initial?.id){mutableStateOf(initial?.title.orEmpty())}
  var author by rememberSaveable(initial?.id){mutableStateOf(initial?.author?:"معتز العلقمي")}
@@ -413,7 +413,12 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   OutlinedTextField(scheduleLocal,{scheduleLocal=it.take(30)},label={Text("موعد النشر yyyy-MM-dd HH:mm")},placeholder={Text("2027-01-20 20:30")},modifier=Modifier.fillMaxWidth())
   Text("التوقيت: "+java.time.ZoneId.systemDefault().id+". اترك الموعد فارغًا للنشر الفوري.",style=MaterialTheme.typography.bodySmall)
   OutlinedTextField(slug,{slug=it.take(150)},label={Text("الرابط الوصفي")},modifier=Modifier.fillMaxWidth())
-  OutlinedTextField(category,{category=it.take(60)},label={Text("معرّف القسم")},modifier=Modifier.fillMaxWidth())
+  Text("قسم المقالة", style = MaterialTheme.typography.titleMedium)
+  Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+   sections.filter { it.id != "about" }.forEach { section ->
+    FilterChip(category == section.id, { category = section.id }, { Text(section.title) }, leadingIcon = { MagazineIcon(sectionIcon(section.id)) })
+   }
+  }
   OutlinedTextField(cover,{cover=it.take(2048)},label={Text("رابط صورة الغلاف HTTPS")},modifier=Modifier.fillMaxWidth())
   OutlinedButton(onClick={pick("cover")},enabled=!busy){Text("رفع صورة الغلاف من الهاتف (حتى 100 ميجابايت)")}
   if(cover.startsWith("https://"))coil.compose.AsyncImage(model=cover,contentDescription="معاينة صورة الغلاف",modifier=Modifier.fillMaxWidth().height(160.dp),contentScale=androidx.compose.ui.layout.ContentScale.Crop)

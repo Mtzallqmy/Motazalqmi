@@ -6,7 +6,7 @@ export function publishedReleases(records) {
   return {tag:r.tag_name,version:numbers.join('.'),versionCode:numbers[0]*10000+numbers[1]*100+numbers[2],
    minSdk:26,architecture:'arm64-v8a',status:'released',prerelease:r.prerelease===true,downloadUrl:asset?.browser_download_url||null,
    releaseUrl:repository+'/releases/tag/'+encodeURIComponent(r.tag_name),publishedAt:r.published_at,
-   installation:r.tag_name.includes('standalone')||r.tag_name.includes('independent')?'independent':'production'};
+   installation:/(?:standalone|independent|preview)/.test(r.tag_name)?'independent':'production'};
  }).filter(r=>r.downloadUrl).sort((a,b)=>b.versionCode-a.versionCode || String(b.publishedAt).localeCompare(String(a.publishedAt)));
 }
 export async function releaseCatalogue(fetcher=fetch) {
