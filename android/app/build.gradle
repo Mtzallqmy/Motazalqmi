@@ -44,7 +44,9 @@ android {
    }
   }
   release {
-   if (project.findProperty('motazIndependentEdition') == 'true') {
+   if (project.findProperty('motazEdition35') == 'true') {
+    applicationIdSuffix '.edition35'
+   } else if (project.findProperty('motazIndependentEdition') == 'true') {
     applicationIdSuffix '.edition341'
     versionNameSuffix '-independent'
    }
