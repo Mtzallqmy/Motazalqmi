@@ -150,3 +150,20 @@ internal fun spaceReaderParagraphs(body: android.text.Spanned, ratio: Float): an
  }
  androidx.compose.ui.viewinterop.AndroidView(factory={view},modifier=Modifier.fillMaxWidth().height(220.dp))
 }
+
+internal fun android.widget.TextView.applyReaderJustification(enabled: Boolean) {
+ if (android.os.Build.VERSION.SDK_INT >= 29) {
+  justificationMode = if (enabled) android.graphics.text.LineBreaker.JUSTIFICATION_MODE_INTER_WORD
+   else android.graphics.text.LineBreaker.JUSTIFICATION_MODE_NONE
+ } else {
+  applyLegacyJustification(enabled)
+ }
+}
+
+// Android 8 and 9 expose these TextView flags through Layout. LineBreaker was added in Android 10.
+@android.annotation.SuppressLint("WrongConstant")
+@Suppress("DEPRECATION")
+private fun android.widget.TextView.applyLegacyJustification(enabled: Boolean) {
+ justificationMode = if (enabled) android.text.Layout.JUSTIFICATION_MODE_INTER_WORD
+  else android.text.Layout.JUSTIFICATION_MODE_NONE
+}

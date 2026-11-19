@@ -341,7 +341,7 @@ internal fun share(context: android.content.Context, text: String) {
        view.typeface = ResourcesCompat.getFont(context, fontId) ?: Typeface.DEFAULT
        view.textSize = size
        view.gravity = if (settings.alignment == "center") android.view.Gravity.CENTER_HORIZONTAL else android.view.Gravity.START
-       view.justificationMode = if (settings.alignment == "justify") android.text.Layout.JUSTIFICATION_MODE_INTER_WORD else android.text.Layout.JUSTIFICATION_MODE_NONE
+       view.applyReaderJustification(settings.alignment == "justify")
        view.setLineSpacing(0f, settings.spacing)
        if (view.tag !== spaced) { engine.renderer.setParsedMarkdown(view, spaced); view.tag = spaced }
       })
