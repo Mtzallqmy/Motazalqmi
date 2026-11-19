@@ -37,17 +37,26 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
  private val mutex = Mutex()
  private val syncMutex = Mutex()
  private val dao = db.dao()
+ private val bundled by lazy {
+  context.assets.open("bootstrap.json").bufferedReader().use { gson.fromJson(it, Snapshot::class.java) }
+ }
+ private fun sectionsWithBundledDefaults(stored: List<SectionDto>): List<SectionDto> {
+  val overrides = stored.associateBy { it.id }
+  val base = bundled.sections.map { overrides[it.id] ?: it }
+  val standard = base.map { it.id }.toSet()
+  return base + stored.filter { it.id !in standard }
+ }
  val library = combine(dao.articles(), dao.states(), dao.metadata()) { rows, states, metadata ->
   val m = metadata.associate { it.key to it.payload }
   Library(rows.mapNotNull { runCatching { gson.fromJson(it.payload, ArticleDto::class.java) }.getOrNull() }
    .sortedByDescending { it.publishDate }, states.associateBy { it.id },
-   parseList<SectionDto>(m["sections"]),
+   sectionsWithBundledDefaults(parseList<SectionDto>(m["sections"])),
    (parseList<QuoteDto>(m["quotes"]) + metadata.filter { m -> m.key.startsWith("saved_quote:") && states.any { it.id == m.key.removePrefix("saved_quote:") && it.saved } }
     .mapNotNull { runCatching { gson.fromJson(it.payload, QuoteDto::class.java) }.getOrNull() }).distinctBy { quoteId(it) },
    rows.filter { it.available }.map { it.id }.toSet(), m["synced_at"]?.toLongOrNull() ?: 0,
    m["about"] ?: "", m["site_name"] ?: "مدونة معتز العلقمي",
    m["tagline"] ?: "حيث تلتقي الكلمة بالفكر، ويزهر الأدب", parseList<AuthorProfileDto>(m["authors"]),
-   runCatching { gson.fromJson(m["ticker"], TickerDto::class.java) }.getOrNull() ?: TickerDto())
+   runCatching { gson.fromJson(m["ticker"], TickerDto::class.java) }.getOrNull() ?: bundled.ticker ?: TickerDto())
  }
  private inline fun <reified T> parseList(raw: String?): List<T> = runCatching {
   // Construct the type from concrete classes so release shrinking cannot erase its generic signature.
@@ -88,7 +97,7 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
    dao.retireAll()
    dao.putArticles(s.articles.map { ArticleEntity(it.id, gson.toJson(it)) })
    dao.putMetadata(listOf(Metadata("sections", gson.toJson(s.sections)), Metadata("quotes", gson.toJson(s.quotes)),
-    Metadata("authors", gson.toJson(s.authors)), Metadata("ticker", gson.toJson(s.ticker)),
+    Metadata("authors", gson.toJson(s.authors)), Metadata("ticker", gson.toJson(s.ticker ?: bundled.ticker)),
     Metadata("about", s.site["about"]?.toString() ?: ""),
     Metadata("site_name", s.site["name"]?.toString() ?: "مدونة معتز العلقمي"),
     Metadata("tagline", s.site["tagline"]?.toString() ?: "")) +

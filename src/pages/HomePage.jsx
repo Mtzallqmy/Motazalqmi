@@ -40,7 +40,7 @@ export function HomePage(interactions) {
           <img alt="" fetchPriority="high" src={lead.coverImage}/></Link>}
       </section>}
     </>}
-    <section id="latest" className="catalog">
+    <section id="latest" className="catalog scroll-mt-24">
       <div className="catalog-heading"><h2>{term ? 'نتائج البحث عن «' + term + '»' : 'أحدث الكتابات'}</h2>
         <label>ترتيب <select value={order} onChange={e => setOrder(e.target.value)}>
           <option value="recent">الأحدث أولًا</option><option value="oldest">الأقدم أولًا</option><option value="title">حسب العنوان</option>
