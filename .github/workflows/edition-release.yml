@@ -50,18 +50,11 @@ jobs:
       - name: Build and verify the Edition 35 ARM64 package
         id: package
         env:
-          GH_TOKEN: ${{ github.token }}
           KEYSTORE64: ${{ secrets.ANDROID_EDITION35_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_EDITION35_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_EDITION35_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_EDITION35_KEY_PASSWORD }}
         run: bash android/release/build-edition35.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: edition35-encrypted-signing-backup
-          path: ${{ runner.temp }}/edition35-signing-backup.cms
-          if-no-files-found: ignore
-          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: steps.package.outputs.signed == 'true'
         with: {name: signed-edition, path: dist/, if-no-files-found: error}
