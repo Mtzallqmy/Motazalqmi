@@ -120,16 +120,13 @@ jobs:
           api-level: ${{ matrix.api }}
           arch: x86_64
           disable-animations: true
-          script: |
-            bash android/gradlew -p android connectedDebugAndroidTest
-            adb pull /sdcard/Android/data/com.moataz.motazalqmi/files/screenshots android/app/build/reports/magazine-screenshots
+          script: bash android/gradlew -p android connectedDebugAndroidTest
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: device-3.4-API-${{ matrix.api }}
           path: |
             android/app/build/reports/androidTests/
-            android/app/build/reports/magazine-screenshots/
             android/app/build/outputs/androidTest-results/
   signed-device:
     needs: package
@@ -158,6 +155,12 @@ jobs:
             grep -F 'Status: ok' /tmp/launch
             sleep 5
             adb shell pidof "$(cat dist/package.txt)"
+            adb exec-out screencap -p > native-magazine-home.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-magazine-home
+          path: native-magazine-home.png
+          if-no-files-found: error
   publish:
     needs: [web, older-android, signed-device]
     if: github.ref == 'refs/heads/main'
