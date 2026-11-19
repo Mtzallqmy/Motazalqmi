@@ -49,7 +49,9 @@ data class Library(val articles: List<ArticleDto> = emptyList(), val states: Map
    m["tagline"] ?: "حيث تلتقي الكلمة بالفكر، ويزهر الأدب", parseList<AuthorProfileDto>(m["authors"]))
  }
  private inline fun <reified T> parseList(raw: String?): List<T> = runCatching {
-  gson.fromJson<List<T>>(raw ?: "[]", object : TypeToken<List<T>>() {}.type)
+  // Construct the type from concrete classes so release shrinking cannot erase its generic signature.
+  val listType = TypeToken.getParameterized(List::class.java, T::class.java).type
+  gson.fromJson<List<T>>(raw ?: "[]", listType) ?: emptyList()
  }.getOrDefault(emptyList())
  suspend fun initialize() = withContext(Dispatchers.IO) { mutex.withLock {
   val marker = File(context.filesDir, "room-import-complete")
