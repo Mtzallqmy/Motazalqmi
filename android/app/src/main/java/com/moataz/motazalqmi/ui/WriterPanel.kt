@@ -49,27 +49,7 @@ data class WriterProfile(val id:String="",val name:String="",val image:String=""
 data class WriterProfiles(val authors:List<WriterProfile> = emptyList())
 interface WriterApi {
  @GET("api/v1/revisions") suspend fun revisions(@Header("Authorization") bearer: String, @Query("id") id: String): StudioRevisionList
- @POST("api/articles") suspend fun loadRevisions() {
-  val article = ui.value.editing ?: return
-  if (ui.value.busy) return
-  viewModelScope.launch {
-   ui.value = ui.value.copy(busy = true, error = "")
-   try {
-    val result = api.revisions(credential(), article.id)
-    if (ui.value.editorOpen && ui.value.editing?.id == article.id) ui.value = ui.value.copy(revisions = result.revisions)
-   } catch (error: kotlinx.coroutines.CancellationException) { throw error }
-   catch (error: Exception) { ui.value = ui.value.copy(error = studioError(error, "تعذّر تحميل نسخ المقالة")) }
-   finally { ui.value = ui.value.copy(busy = false) }
-  }
- }
- fun restoreRevision(revision: StudioRevision) {
-  val current = ui.value.editing ?: return
-  keepDraft(current.id, revision.data.copy(id = current.id, updatedAt = current.updatedAt))
-  ui.value = ui.value.copy(revisions = null, editorGeneration = ui.value.editorGeneration + 1,
-   notice = "استُعيدت النسخة إلى المحرر. احفظها بعد المراجعة.")
- }
- fun closeRevisions() { ui.value = ui.value.copy(revisions = null) }
- fun saveEditorial(@Header("Authorization") bearer: String, @Body value: StudioEditorialRequest)
+ @POST("api/articles") suspend fun saveEditorial(@Header("Authorization") bearer: String, @Body value: StudioEditorialRequest)
  @POST("api/v1/telegram-pair") suspend fun telegram(@Header("Authorization") bearer: String, @Body value: StudioTelegramRequest): StudioTelegramStatus
  @GET("api/v1/assets") suspend fun media(@Header("Authorization") bearer:String,@Query("cursor") cursor:String?):WriterMediaLibrary
  @POST("api/v1/media-delete") suspend fun removeMedia(@Header("Authorization") bearer:String,@Body value:MediaDeleteRequest)
@@ -247,6 +227,26 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    finally{ui.value=ui.value.copy(busy=false)}
   }
  }
+ fun loadRevisions() {
+  val article = ui.value.editing ?: return
+  if (ui.value.busy) return
+  viewModelScope.launch {
+   ui.value = ui.value.copy(busy = true, error = "")
+   try {
+    val result = api.revisions(credential(), article.id)
+    if (ui.value.editorOpen && ui.value.editing?.id == article.id) ui.value = ui.value.copy(revisions = result.revisions)
+   } catch (error: kotlinx.coroutines.CancellationException) { throw error }
+   catch (error: Exception) { ui.value = ui.value.copy(error = studioError(error, "تعذّر تحميل نسخ المقالة")) }
+   finally { ui.value = ui.value.copy(busy = false) }
+  }
+ }
+ fun restoreRevision(revision: StudioRevision) {
+  val current = ui.value.editing ?: return
+  keepDraft(current.id, revision.data.copy(id = current.id, updatedAt = current.updatedAt))
+  ui.value = ui.value.copy(revisions = null, editorGeneration = ui.value.editorGeneration + 1,
+   notice = "استُعيدت النسخة إلى المحرر. احفظها بعد المراجعة.")
+ }
+ fun closeRevisions() { ui.value = ui.value.copy(revisions = null) }
  fun saveEditorial(value: StudioEditorialFields) {
   if (ui.value.busy) return
   viewModelScope.launch {
