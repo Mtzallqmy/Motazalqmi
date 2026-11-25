@@ -45,7 +45,7 @@ try {
  await page.getByRole('heading',{name:'المقالات التوعوية',exact:true,level:2}).waitFor();
  await page.waitForFunction(()=>document.querySelectorAll('.health-articles article').length===3);
  await page.getByRole('link',{name:'قراءة كيف تقرأ ملصق الدواء؟'}).click();
- await page.getByText('المصادر',{exact:true}).waitFor();
+ await page.getByRole('heading',{name:'المصادر',exact:true,level:2}).waitFor();
  await page.goto('http://localhost:4173');
  await page.locator('.lead-text h2 a').waitFor();
  await page.locator('.lead-text h2 a').click();
