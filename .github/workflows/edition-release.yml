@@ -1,7 +1,7 @@
-name: Motaz 3.5 verified release
+name: Motaz 3.6 verified release
 on:
   push:
-    branches: [main, release/preview-35]
+    branches: [main, feat/health-library]
     paths: ['android/**', 'src/**', 'server/**', 'shared/**', 'api/**', 'db/**', 'scripts/**', 'vercel.json', 'tests/**', 'package*.json', '.github/workflows/edition-release.yml']
   workflow_dispatch:
 permissions:
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: web-3.5-verification
+          name: web-3.6-verification
           path: |
             mobile-home.png
             desktop-home.png
@@ -59,9 +59,12 @@ jobs:
         if: steps.package.outputs.signed == 'true'
         with: {name: signed-edition, path: dist/, if-no-files-found: error}
       - uses: actions/upload-artifact@v4
+        if: steps.package.outputs.signed == 'false'
+        with: {name: unsigned-edition, path: unsigned-release/, if-no-files-found: error}
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: native-3.5-quality
+          name: native-3.6-quality
           path: android/app/build/reports/
   older-android:
     runs-on: ubuntu-latest
@@ -85,7 +88,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: device-3.5-API-${{ matrix.api }}
+          name: device-3.6-API-${{ matrix.api }}
           path: |
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
@@ -140,7 +143,7 @@ jobs:
           set -eu
           cd dist
           sha256sum -c SHA256SUMS
-          tag=v3.5.0-preview.1
+          tag=v3.6.0-preview.1
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
-          printf '%s\n' 'أول إصدار بالحزمة والتوقيع الجديدين. يثبّت بجانب ٣.٤.١، وتُثبّت الإصدارات اللاحقة التي تحمل هذا التوقيع فوقه.' 'الاسم الظاهر: معتز العلقمي. شريط إعلانات قابل للتحرير، وأبواب الإنسان والثقافة والدين واللغة. Android 8+ · ARM64.' > RELEASE-NOTES.md
-          gh release create "$tag" Motazalqmi-3.5.0-ARM64.apk SHA256SUMS signature.txt package.txt -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title 'معتز العلقمي 3.5.0' --notes-file RELEASE-NOTES.md
+          printf '%s\n' 'تحديث ٣.٦.٠ بالتوقيع نفسه لنسخة ٣.٥.٠.' 'الاسم الظاهر: معتز العلقمي. قسم الصحة والدواء، روابط مختصرة، وتزامن وتحسينات في تجربة الكاتب. Android 8+ · ARM64.' > RELEASE-NOTES.md
+          gh release create "$tag" Motazalqmi-3.6.0-ARM64.apk SHA256SUMS signature.txt package.txt -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title 'معتز العلقمي 3.6.0' --notes-file RELEASE-NOTES.md

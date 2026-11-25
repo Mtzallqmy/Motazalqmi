@@ -32,6 +32,13 @@ class ReaderUiTest {
   file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
   bitmap.recycle()
  }
+ @Test fun healthDeskOpensWithBundledContent() {
+  rule.waitUntil(20000) { rule.onAllNodesWithText("10 مقالات").fetchSemanticsNodes().isNotEmpty() }
+  rule.onNodeWithTag("home-feed").performScrollToNode(hasTestTag("health-door"))
+  rule.onNodeWithTag("health-door").performClick()
+  rule.onNodeWithText("مادة منشورة",substring=true).assertIsDisplayed()
+  rule.onNodeWithText("محتوى للتوعية العامة.",substring=true).assertIsDisplayed()
+ }
  @Test fun readerNavigationOpensLocalLibraryAndSettings() {
   rule.onNodeWithText("مكتبتي").performClick()
   rule.onNodeWithText("سجل القراءة").assertIsDisplayed()
@@ -46,7 +53,7 @@ class ReaderUiTest {
   // The featured card now follows the masthead and horizontal section carousel,
   // so it is not necessarily composed until the LazyColumn is scrolled.
   rule.waitUntil(20000) {
-   rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty()
+   rule.onAllNodesWithText("10 مقالات").fetchSemanticsNodes().isNotEmpty()
   }
   rule.onNodeWithTag("home-feed").performScrollToNode(hasTestTag(featuredTag))
   rule.onNodeWithTag(featuredTag).assertIsDisplayed()
@@ -65,7 +72,7 @@ class ReaderUiTest {
   rule.onNodeWithTag(savedCardTag).assertIsDisplayed()
  }
  @Test fun readerOffersNativeIndexAndAppearanceSheet() {
-  rule.waitUntil(20000) { rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty() }
+  rule.waitUntil(20000) { rule.onAllNodesWithText("10 مقالات").fetchSemanticsNodes().isNotEmpty() }
   rule.onNodeWithTag("home-feed").performScrollToNode(hasTestTag("featured-article-seed-1"))
   rule.onNodeWithTag("featured-article-seed-1").performClick()
   rule.onNodeWithContentDescription("إعدادات القراءة").performClick()
@@ -80,7 +87,7 @@ class ReaderUiTest {
  }
 
  @Test fun magazineMenuOpensWebsiteSectionsAndWriter() {
-  rule.waitUntil(20000) { rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty() }
+  rule.waitUntil(20000) { rule.onAllNodesWithText("10 مقالات").fetchSemanticsNodes().isNotEmpty() }
   rule.onNodeWithContentDescription("القائمة").performClick()
   rule.onNodeWithTag("magazine-menu").performScrollToNode(hasText("من بطون الكتب"))
   rule.onNode(hasText("من بطون الكتب") and hasAnyAncestor(hasTestTag("magazine-menu"))).performClick()
@@ -91,7 +98,7 @@ class ReaderUiTest {
  }
 
  @Test fun articleOpensTheAuthorsOfflineCatalogue() {
-  rule.waitUntil(20000) { rule.onAllNodesWithText("7 مقالات").fetchSemanticsNodes().isNotEmpty() }
+  rule.waitUntil(20000) { rule.onAllNodesWithText("10 مقالات").fetchSemanticsNodes().isNotEmpty() }
   rule.onNodeWithTag("home-feed").performScrollToNode(hasTestTag("featured-article-seed-1"))
   rule.onNodeWithTag("featured-article-seed-1").performClick()
   rule.onNodeWithTag("reader-author").performScrollTo().performClick()

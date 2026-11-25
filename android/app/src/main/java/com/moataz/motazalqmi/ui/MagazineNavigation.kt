@@ -31,6 +31,7 @@ internal fun sectionIcon(id: String) = when (id) {
     "culture" -> R.drawable.blog_library_big
     "faith" -> R.drawable.blog_book_heart
     "language" -> R.drawable.blog_languages
+    HEALTH_SECTION -> R.drawable.blog_health
     else -> R.drawable.blog_user_check
 }
 

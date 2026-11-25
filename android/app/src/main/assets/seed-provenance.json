@@ -3,5 +3,10 @@
   "retrieved": "2026-11-14",
   "sha256": "ce61d82af3cef960d636b0d9dd590fbfd26ecb556d6167e6d2800e9561d37057",
   "articles": 7,
-  "permission": "Included under project owner instruction; published blog content only."
+  "permission": "Included under project owner instruction; published blog content only.",
+  "supplemental": {
+    "source": "db/content/health-launch.json",
+    "articles": 3,
+    "description": "Editorial Arabic medication-safety launch articles with attributed sources"
+  }
 }

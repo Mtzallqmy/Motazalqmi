@@ -41,6 +41,7 @@ import javax.inject.Inject
 data class WriterLogin(val email:String,val password:String,val remember:Boolean=true)
 data class WriterRefresh(val grantType:String="refresh",val refreshToken:String)
 data class WriterAccess(val accessToken:String="",val expiresAt:Long=0L,val refreshToken:String?=null,val refreshExpiresAt:Long=0L)
+data class WriterActionResult(val id:String="",val shortUrl:String="")
 data class WriterList(val articles: List<ArticleDto> = emptyList(), val editorial: StudioEditorial? = null)
 data class MediaDirectRequest(val mime:String,val base64:String,val purpose:String)
 data class MediaDirectResponse(val url:String="")
@@ -63,14 +64,14 @@ interface WriterApi {
  @POST("api/v1/mobile-admin") suspend fun login(@Body value:WriterLogin):WriterAccess
  @POST("api/v1/mobile-admin") suspend fun refresh(@Body value:WriterRefresh):WriterAccess
  @GET("api/articles") suspend fun articles(@Query("scope") scope:String,@Header("Authorization") bearer:String):WriterList
- @POST("api/articles") suspend fun change(@Header("Authorization") bearer:String,@Body change:WriterAction)
+ @POST("api/articles") suspend fun change(@Header("Authorization") bearer:String,@Body change:WriterAction):WriterActionResult
  @POST("api/v1/media-direct") suspend fun uploadMedia(@Header("Authorization") bearer:String,@Body value:MediaDirectRequest):MediaDirectResponse
 }
 
 data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val restoring:Boolean=true,val error:String="",
  val editorial: StudioEditorial? = null, val telegram: StudioTelegramStatus? = null,
  val revisions: List<StudioRevision>? = null, val editorGeneration: Int = 0,
- val studio:String="articles",val notice:String="",val media:List<WriterMedia> = emptyList(),val mediaCursor:String?=null,val pendingMedia:List<WriterPendingMedia> = emptyList(),val profiles:List<WriterProfile> = emptyList(),val progress:Int?=null,val articles:List<ArticleDto> = emptyList(),val editing:ArticleDto?=null,val editorOpen:Boolean=false)
+ val studio:String="articles",val notice:String="",val publishedLink:String="",val media:List<WriterMedia> = emptyList(),val mediaCursor:String?=null,val pendingMedia:List<WriterPendingMedia> = emptyList(),val profiles:List<WriterProfile> = emptyList(),val progress:Int?=null,val articles:List<ArticleDto> = emptyList(),val editing:ArticleDto?=null,val editorOpen:Boolean=false)
 
 @HiltViewModel class WriterViewModel @Inject constructor(
  private val api:WriterApi,private val secureSession:SecureWriterSession,
@@ -110,12 +111,18 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
     val session=api.login(WriterLogin(email.trim(),password,remember))
     require(session.accessToken.isNotBlank()&&session.expiresAt>System.currentTimeMillis())
     token=session.accessToken;expiresAt=session.expiresAt
-    if(remember && !session.refreshToken.isNullOrBlank() && session.refreshExpiresAt>System.currentTimeMillis())
-     secureSession.save(session.refreshToken,session.refreshExpiresAt)
-    else secureSession.clear()
-    ui.value=ui.value.copy(authorized=true,busy=false)
+    val remembered=runCatching {
+     if(remember && !session.refreshToken.isNullOrBlank() && session.refreshExpiresAt>System.currentTimeMillis())
+      secureSession.save(session.refreshToken,session.refreshExpiresAt)
+     else secureSession.clear()
+    }.isSuccess
+    ui.value=ui.value.copy(authorized=true,busy=false,notice=if(remembered) "" else "تم الدخول لهذه الجلسة. تعذر حفظها على الجهاز.")
     reload()
-   }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="تعذر تسجيل الدخول. تحقق من البيانات والاتصال.") }
+   }catch (e:kotlinx.coroutines.CancellationException){throw e}
+   catch (e:retrofit2.HttpException){
+    val message=when(e.code()){401->"البريد أو كلمة المرور غير صحيحة.";429->"كثرت محاولات الدخول. حاول لاحقًا.";else->"تعذر الاتصال بخدمة الدخول."}
+    ui.value=ui.value.copy(busy=false,error=message)
+   }catch (_:Exception){ui.value=ui.value.copy(busy=false,error="تعذر تسجيل الدخول. تحقق من اتصال الإنترنت وضبط وقت الهاتف.") }
   }
  }
  private suspend fun credential():String {
@@ -160,9 +167,10 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   viewModelScope.launch{
    ui.value=ui.value.copy(busy=true,error="")
    try{
-    api.change(credential(),WriterAction("save",article=value,expectedVersion=value.updatedAt.takeIf{it.isNotBlank()}))
+    val result=api.change(credential(),WriterAction("save",article=value,expectedVersion=value.updatedAt.takeIf{it.isNotBlank()}))
     drafts.edit().remove(ui.value.editing?.id?:"new").apply()
-    ui.value=ui.value.copy(editorOpen=false,busy=false)
+    val published=value.status=="published" && (value.scheduledAt.isBlank() || runCatching { java.time.Instant.parse(value.scheduledAt).toEpochMilli() <= System.currentTimeMillis() }.getOrDefault(false))
+    ui.value=ui.value.copy(editorOpen=false,busy=false,publishedLink=if(published) result.shortUrl else "",notice=if(published) "نُشرت المقالة" else "حُفظت المقالة")
     reload()
    }catch (e:Exception){ui.value=ui.value.copy(busy=false,error=studioError(e,"تعذر حفظ المقال؛ تحقق من الرابط الوصفي وبيانات المقال."))}
   }
@@ -178,7 +186,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
   }
  }
  fun selectStudio(value:String){
-  ui.value=ui.value.copy(studio=value,error="",notice="")
+  ui.value=ui.value.copy(studio=value,error="",notice="",publishedLink="")
   when(value){
    "media"->loadMedia(null)
    "telegram" -> checkTelegram("status")
@@ -276,6 +284,8 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
 
 @Composable fun WriterPanel(vm:WriterViewModel, sections: List<com.moataz.motazalqmi.data.SectionDto>, back:()->Unit){
  val state by vm.ui.collectAsState()
+ val context=androidx.compose.ui.platform.LocalContext.current
+ var revealPassword by remember { mutableStateOf(false) }
  var email by remember{mutableStateOf("")}
  var password by remember{mutableStateOf("")}
  var remember by rememberSaveable{mutableStateOf(true)}
@@ -290,6 +300,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    TextButton(onClick=back){Text("عودة")}
   }
   if(state.notice.isNotBlank())Text(state.notice,color=MaterialTheme.colorScheme.primary)
+  if(state.authorized && state.publishedLink.isNotBlank()) TextButton(onClick={share(context,state.publishedLink)}) { Text("مشاركة الرابط المختصر") }
   if(state.error.isNotBlank())Text(state.error,color=MaterialTheme.colorScheme.error)
   state.progress?.let { Text("رفع الملف · $it٪"); TextButton(onClick=vm::cancelUpload){Text("إلغاء الرفع")} }
   if(state.busy)LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -303,7 +314,7 @@ data class WriterUiState(val authorized:Boolean=false,val busy:Boolean=false,val
    Spacer(Modifier.height(20.dp))
    Text("سجّل الدخول لتحرير المقالات وإدارة الكتّاب والوسائط.")
    OutlinedTextField(email,{email=it},label={Text("البريد الإداري")},singleLine=true,modifier=Modifier.fillMaxWidth(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Email))
-   OutlinedTextField(password,{password=it},label={Text("كلمة المرور")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
+   OutlinedTextField(password,{password=it},label={Text("كلمة المرور")},singleLine=true,visualTransformation=if(revealPassword) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),trailingIcon={TextButton(onClick={revealPassword=!revealPassword}){Text(if(revealPassword) "إخفاء" else "إظهار")}},modifier=Modifier.fillMaxWidth(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password))
    Row(verticalAlignment=Alignment.CenterVertically){Text("تذكر دخولي بأمان على هذا الجهاز (30 يومًا)",Modifier.weight(1f));Switch(remember,onCheckedChange={remember=it})}
    Button(onClick={vm.login(email,password,remember);password=""},enabled=!state.busy&&email.isNotBlank()&&password.isNotBlank()){Text("دخول الكاتب")}
   } else if(state.editorOpen){

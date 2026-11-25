@@ -6,8 +6,10 @@ import { ARTICLE_CATEGORIES, PRIMARY_TOPICS, getCategory } from '../data/categor
 import { useArticles } from '../hooks/useArticles';
 import { ArticleCard } from '../components/ArticleCard';
 import { EmptyState } from '../components/Ornaments';
+import { HealthFeature } from '../components/HealthDesk';
 import { articlePath, formatDate } from '../lib/format';
 import { normalizeArabic } from '../../shared/arabicSearch';
+import { HEALTH_SECTION_ID } from '../../shared/healthDesk.js';
 
 export function HomePage(interactions) {
   const { published, quotes, loading, error, site, ticker } = useArticles();
@@ -17,7 +19,7 @@ export function HomePage(interactions) {
   const [order, setOrder] = useState('recent');
   const [quoteIndex, setQuoteIndex] = useState(0);
   const quote = quotes.length ? quotes[quoteIndex % quotes.length] : null;
-  const lead = published.find(a => a.featured) || published[0];
+  const lead = published.find(a => a.featured) || published.find(a => a.category !== HEALTH_SECTION_ID) || published[0];
   const articles = useMemo(() => {
     const query = normalizeArabic(term);
     return published.filter(a => (!category || a.category === category) &&
@@ -27,7 +29,7 @@ export function HomePage(interactions) {
   }, [published, category, term, order]);
   return <div className="edition">
     {!term && <>
-      <header className="masthead"><span>{site?.tagline}</span><h1>مدونة معتز العلقمي</h1><p>أدب وإنسان وثقافة ودين ولغة عربية</p></header>
+      <header className="masthead"><span>{site?.tagline}</span><h1>مدونة معتز العلقمي</h1><p>أدب وثقافة وفكر وتوعية صحية</p></header>
       <AnnouncementTicker ticker={ticker}/>
       <nav className="edition-topics" aria-label="الأبواب الرئيسية">{PRIMARY_TOPICS.map(({id,title,icon:Icon}) =>
         <Link key={id} to={'/category/'+id}><Icon size={21} aria-hidden="true"/><span>{title}</span></Link>)}</nav>
@@ -39,6 +41,7 @@ export function HomePage(interactions) {
         </div>{lead.coverImage && <Link className="lead-image" to={articlePath(lead)} aria-label={lead.title}>
           <img alt="" fetchPriority="high" src={lead.coverImage}/></Link>}
       </section>}
+      <HealthFeature/>
     </>}
     <section id="latest" className="catalog scroll-mt-24">
       <div className="catalog-heading"><h2>{term ? 'نتائج البحث عن «' + term + '»' : 'أحدث الكتابات'}</h2>

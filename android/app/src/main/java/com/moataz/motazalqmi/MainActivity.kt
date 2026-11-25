@@ -16,7 +16,11 @@ import dagger.hilt.android.AndroidEntryPoint
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState); enableEdgeToEdge()
   val uri = intent?.data
-  val slug = if (uri?.scheme == "https" && uri.host == "motazalqmi.vercel.app" && uri.pathSegments.firstOrNull() == "articles") uri.lastPathSegment else null
+  val slug = if (uri?.scheme == "https" && uri.host == "motazalqmi.vercel.app" && uri.pathSegments.size == 2) when (uri.pathSegments[0]) {
+   "articles" -> uri.pathSegments[1]
+   "r" -> "r/" + uri.pathSegments[1]
+   else -> null
+  } else null
   setContent {
    val vm: BlogViewModel = hiltViewModel()
    val settings by vm.settings.collectAsStateWithLifecycle()

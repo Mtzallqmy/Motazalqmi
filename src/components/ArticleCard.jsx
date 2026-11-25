@@ -5,10 +5,14 @@ import { articlePath, formatDate } from '../lib/format';
 import {AuthorBadge} from './ArticleMedia';
 export function ArticleCard({ article, bookmarks, onBookmark, onLike, likes = [], onShare, large = false }) {
   const liked = likes.includes(article.id);
+  const category = getCategory(article.category);
+  const Icon = category.icon;
   return <article className="group flex flex-col overflow-hidden rounded-3xl border border-gold/30 bg-white shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
     <div className={`relative overflow-hidden ${large ? 'h-72 sm:h-80' : 'h-56'}`}>
-      <Link to={articlePath(article)} aria-label={`قراءة ${article.title}`} className="block h-full"><img loading="lazy" src={article.coverImage} alt={`غلاف: ${article.title}`} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-700" onError={e => { e.currentTarget.style.objectFit = 'contain'; }}/></Link>
-      <span className="absolute top-4 right-4 rounded-xl bg-cream/95 px-3 py-1 text-xs font-bold text-teal">{getCategory(article.category).title}</span>
+      <Link to={articlePath(article)} aria-label={`قراءة ${article.title}`} className="block h-full">{article.coverImage ?
+        <img loading="lazy" src={article.coverImage} alt="" className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-700" onError={e => { e.currentTarget.style.objectFit = 'contain'; }}/> :
+        <span className={`article-cover-fallback bg-gradient-to-l ${category.color}`} aria-hidden="true"><Icon size={65} strokeWidth={1.2}/></span>}</Link>
+      <span className="absolute top-4 right-4 rounded-xl bg-cream/95 px-3 py-1 text-xs font-bold text-teal">{category.title}</span>
       {onBookmark && <button onClick={() => onBookmark(article.id)} aria-label="حفظ المقالة" aria-pressed={bookmarks.includes(article.id)} className={`absolute top-4 left-4 rounded-xl p-2 ${bookmarks.includes(article.id) ? 'bg-gold text-ink' : 'bg-black/40 text-white'}`}><Bookmark size={17}/></button>}
     </div>
     <div className="flex flex-1 flex-col justify-between p-6">

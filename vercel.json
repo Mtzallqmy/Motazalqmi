@@ -10,6 +10,10 @@
   },
   "rewrites": [
     {
+      "source": "/r/:code",
+      "destination": "/api/v1/short-link?code=:code"
+    },
+    {
       "source": "/api/v1/articles/:slug",
       "destination": "/api/v1/article?slug=:slug"
     },

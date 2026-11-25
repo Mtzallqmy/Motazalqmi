@@ -20,7 +20,7 @@ export function createHandler({snapshot=publishedSnapshot,list=listPublished,rel
   const resource=param(req,'resource',30);
   // Consolidated into this dynamic route to stay within Vercel Hobby's 12-function quota.
   if(['authors','revisions','assets'].includes(resource)) return studio(req,res,resource);
-  if(resource==='article-page'||resource==='sitemap') return discovery(req,res,resource);
+  if(['article-page','sitemap','short-link'].includes(resource)) return discovery(req,res,resource);
   if(resource==='mobile-admin') return mobileAdminHandler(req,res);
   if(resource==='media-delete') return mediaDeleteHandler(req,res);
   if(resource==='media-upload') return blobUploadHandler(req,res);

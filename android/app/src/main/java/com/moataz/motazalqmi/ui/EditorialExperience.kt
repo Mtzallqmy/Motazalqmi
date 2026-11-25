@@ -33,7 +33,7 @@ private val ShelfSections = listOf("books", "arabic_lit")
 @Composable internal fun EditorialHome(library: Library, settings: ReadingSettings, busy: Boolean,
     sync: () -> Unit, open: (String) -> Unit, section: (String) -> Unit, writer: () -> Unit) {
     val published = remember(library.articles, library.available) { library.articles.filter { it.id in library.available } }
-    val lead = published.firstOrNull { it.featured } ?: published.firstOrNull()
+    val lead = published.firstOrNull { it.featured } ?: published.firstOrNull { it.category != HEALTH_SECTION } ?: published.firstOrNull()
     var category by rememberSaveable { mutableStateOf("") }
     var order by rememberSaveable { mutableStateOf("recent") }
     var quoteIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -43,6 +43,7 @@ private val ShelfSections = listOf("books", "arabic_lit")
     val scope = rememberCoroutineScope()
     val topics = listOf("arabic_lit", "human", "culture", "faith", "language").mapNotNull { id -> library.sections.firstOrNull { it.id == id } }
     val tickerVisible = library.ticker.enabled && library.ticker.items.isNotEmpty()
+    val healthVisible = library.sections.any { it.id == HEALTH_SECTION }
     LazyColumn(Modifier.fillMaxSize().testTag("home-feed"), state = listState, contentPadding = PaddingValues(18.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item {
@@ -61,10 +62,12 @@ private val ShelfSections = listOf("books", "arabic_lit")
                 val article = published.find { it.slug == slug }
                 if (article == null) false else { open(article.id); true }
             }, openSection = section, latest = {
-                scope.launch { listState.animateScrollToItem(if (lead == null) 3 else 4) }
+                val latestIndex = 3 + listOf(lead != null, healthVisible).count { it }
+                scope.launch { listState.animateScrollToItem(latestIndex) }
             })
         }
         item { SectionDoors(topics.ifEmpty { library.sections }, open = section) }
+        if (healthVisible) item { HealthDoor { section(HEALTH_SECTION) } }
         if (lead != null) item {
             Card(onClick = { open(lead.id) }, modifier = Modifier.fillMaxWidth().testTag("featured-article-${lead.id}"),
                 shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -190,7 +193,7 @@ internal val LocalArticleActions = compositionLocalOf<ArticleActions?> { null }
     IconButton(onClick = { actions.toggle(article.id) }, modifier = Modifier.semantics { selected = saved }) {
         if (saved) Icon(Icons.Default.Bookmark, "إزالة من المحفوظات") else MagazineIcon(R.drawable.blog_bookmark, "حفظ المقالة")
     }
-    IconButton(onClick = { share(context, article.title + "\nhttps://motazalqmi.vercel.app/articles/" + android.net.Uri.encode(article.slug)) }) {
+    IconButton(onClick = { share(context, article.title + "\n" + articleShareUrl(article.id)) }) {
         MagazineIcon(R.drawable.blog_share2, "مشاركة المقالة")
     }
 }
