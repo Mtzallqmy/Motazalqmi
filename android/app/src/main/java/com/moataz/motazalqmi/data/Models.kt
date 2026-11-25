@@ -58,3 +58,8 @@ fun readerImageUrl(url:String):String =
  if(url.startsWith("https://images.unsplash.com/"))
   "https://motazalqmi.vercel.app/api/v1/image?src="+java.net.URLEncoder.encode(url,"UTF-8")
  else url
+
+/** Same public short code as the server, computable from an offline article ID. */
+fun articleShortCode(id: String): String = java.security.MessageDigest.getInstance("MD5")
+ .digest(id.toByteArray(Charsets.UTF_8)).take(8).joinToString("") { "%02x".format(it) }
+fun articleShareUrl(id: String): String = "https://motazalqmi.vercel.app/r/" + articleShortCode(id)

@@ -10,7 +10,7 @@ import { BookOpen, Edit3, Eye, Feather, PlusCircle, Quote, Save, Send, Settings,
 import { useAuth } from '../context/AuthContext';
 import { useArticles } from '../hooks/useArticles';
 import { ARTICLE_CATEGORIES, getCategory } from '../data/categories';
-import { AUTHOR, DEFAULT_IMAGE, slugify, articlePath } from '../lib/format';
+import { AUTHOR, DEFAULT_IMAGE, slugify, articlePath, publicationUrl } from '../lib/format';
 import { MediaUploader } from '../components/MediaUploader';
 import {ArticleMedia,AuthorBadge} from '../components/ArticleMedia';
 import {TelegramAdmin} from '../components/TelegramAdmin';
@@ -46,6 +46,7 @@ export function DashboardPage() {
   const [articleSearch,setArticleSearch]=useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [publishedLink,setPublishedLink]=useState('');
   const [success, setSuccess] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [preview, setPreview] = useState(false);
@@ -107,7 +108,7 @@ export function DashboardPage() {
     update({content:value},false);setHistoryVersion(v=>v+1);
   };
   const change = (name, value) => update({[name]:value,...(name==='author'?{authorId:''}:{})});
-  const clear = () => { loaded.current=null;expectedVersion.current=null;setEditingId(null);setForm(blankArticle());setDraftNotice('');setSearchParams({}, {replace:true});setError('');setSuccess(''); };
+  const clear = () => { setPublishedLink('');loaded.current=null;expectedVersion.current=null;setEditingId(null);setForm(blankArticle());setDraftNotice('');setSearchParams({}, {replace:true});setError('');setSuccess(''); };
   const edit = article => {setSearchParams({edit:article.id});setError('');setSuccess('');window.scrollTo({top:0});};
   const format = (before, after='') => {
     const target = editorRef.current;
@@ -118,7 +119,7 @@ export function DashboardPage() {
     requestAnimationFrame(() => { target.focus(); target.setSelectionRange(start+before.length, start+before.length+selected.length); });
   };
   async function submit(status) {
-    setError(''); setSuccess('');
+    setError(''); setSuccess(''); setPublishedLink('');
     const title = form.title.trim(), content = form.content.trim();
     if (!title || !content) { setError('عنوان المقالة ومتنها مطلوبان.'); return; }
     if (title.length > 220) { setError('عنوان المقالة طويل جدًا.'); return; }
@@ -136,7 +137,7 @@ export function DashboardPage() {
       views:old?.views || 0, likes:old?.likes || 0 };
     if(status==='published' && !window.confirm(scheduledAt&&Date.parse(scheduledAt)>Date.now()?'تأكيد جدولة المقالة للموعد المحدد؟':'تأكيد نشر هذه النسخة للقراء؟')) return;
     setBusy(true);
-    try { await save(item, expectedVersion.current); try { localStorage.removeItem(draftKey(editingId)); } catch {} clear(); setSuccess(status === 'draft' ? 'حُفظت المسودة في قاعدة البيانات.' : 'نُشرت المقالة بنجاح.'); }
+    try { const saved=await save(item, expectedVersion.current); try { localStorage.removeItem(draftKey(editingId)); } catch {} clear(); const scheduled=isScheduled(item);setSuccess(status === 'draft' ? 'حُفظت المسودة في قاعدة البيانات.' : scheduled?'جُدولت المقالة للنشر.':'نُشرت المقالة بنجاح.');if(status==='published' && !scheduled)setPublishedLink(saved.shortUrl || publicationUrl({...item,...saved})); }
     catch (e) { setError(e.message || 'تعذر حفظ المقالة.'); }
     finally { setBusy(false); }
   }
@@ -166,6 +167,7 @@ export function DashboardPage() {
     {isDemo && <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#F4ECE1] border border-gold/40 p-5"><p className="text-sm">المقالات الحالية أمثلة تجريبية. استوردها إلى Neon إن رغبت في إدارتها، أو ابدأ بكتابة مقالة جديدة.</p><button disabled={busy} onClick={handleImport} className="bg-teal text-white rounded-xl px-5 py-2.5 font-bold text-sm inline-flex items-center gap-2"><Upload size={17}/> استيراد الأمثلة السبعة</button></div>}
     {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 text-red-800 border border-red-200 p-4">{error}</p>}
     {success && <p role="status" className="mt-5 rounded-xl bg-cream text-teal border border-gold/30 p-4">{success}</p>}
+    {publishedLink && <div className="publish-link"><a href={publishedLink} target="_blank" rel="noopener noreferrer" dir="ltr">{publishedLink}</a><button type="button" onClick={async()=>{try{await navigator.clipboard.writeText(publishedLink);setSuccess('تم نسخ الرابط المختصر.');}catch{setError('تعذر نسخ الرابط.');}}}><Copy size={17}/> نسخ الرابط المختصر</button></div>}
     {editorialOpen && editorialForm && <section className="mt-6 rounded-3xl bg-white border border-gold/40 p-6 sm:p-8 shadow-soft">
       <div className="flex justify-between items-center gap-3"><h2 className="font-literature text-2xl font-bold text-teal">إدارة هوية المدونة والاقتباسات</h2><button type="button" className="text-rust underline text-sm" onClick={()=>setEditorialOpen(false)}>إغلاق</button></div>
       <div className="grid gap-4 mt-5">
@@ -254,7 +256,7 @@ export function DashboardPage() {
           <div className="flex flex-wrap gap-3 border-t border-gold/20 pt-5"><button disabled={busy} onClick={()=>submit('published')} className="inline-flex items-center gap-2 bg-teal text-white px-6 py-3 rounded-xl text-sm font-bold shadow-sm"><Send size={17}/> {form.scheduledLocal&&new Date(form.scheduledLocal).getTime()>Date.now()?'جدولة المقالة':'نشر المقالة'}</button><button disabled={busy} onClick={()=>submit('draft')} className="inline-flex items-center gap-2 bg-gold/20 text-rust px-5 py-3 rounded-xl text-sm font-bold"><Save size={17}/> حفظ كمسودة</button>{editingId && <button onClick={clear} className="text-ink/65 underline text-sm">إلغاء التعديل</button>}</div>
         </div>
       </section>
-      <section className="lg:col-span-5 bg-white rounded-3xl border border-gold/40 p-6 shadow-soft" aria-labelledby="manage-title"><label className="block mb-5">ابحث في المنشورات<input value={articleSearch} onChange={e=>setArticleSearch(e.target.value)} className="block w-full p-3 mt-2 rounded-xl border border-gold/40" placeholder="العنوان أو الكاتب"/></label><div className="flex flex-wrap justify-between gap-2 items-center mb-5"><h2 id="manage-title" className="font-literature text-2xl font-bold">إدارة المنشورات ({articles.length})</h2><div className="flex gap-1 bg-cream p-1 rounded-xl">{[['all','الكل'],['published','منشور'],['draft','مسودات'],['scheduled','مجدول']].map(([id,title])=><button key={id} onClick={()=>setFilter(id)} className={`text-xs font-bold rounded-lg px-2.5 py-1.5 ${filter===id?'bg-teal text-white':''}`}>{title}</button>)}</div></div><div className="space-y-3 max-h-[750px] overflow-y-auto">{filtered.map(article=><div key={article.id} className={`rounded-2xl p-4 border ${editingId===article.id?'border-teal bg-teal/5':'border-gold/30 bg-cream/50'}`}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs text-rust font-bold">{getCategory(article.category).title} · {publicationLabel(article)}{article.featured?' · مميزة':''}</p><h3 className="font-literature font-bold text-lg line-clamp-2 mt-1">{article.title}</h3><p className="text-xs text-ink/55 mt-1">{isScheduled(article)?new Date(article.scheduledAt).toLocaleString('ar-YE'):article.publishDate} · {article.readTime}</p></div><div className="flex gap-1 shrink-0"><Link to={articlePath(article)} title="معاينة" className="p-2 text-teal rounded-lg hover:bg-teal/10"><Eye size={17}/></Link><button type="button" onClick={async()=>{const url=window.location.origin+articlePath(article);try{await navigator.clipboard.writeText(url);setSuccess('نُسخ رابط المقالة: '+url);}catch{setError('تعذر نسخ الرابط.');}}} title="نسخ الرابط المباشر" className="p-2 text-teal rounded-lg hover:bg-teal/10"><Copy size={17}/></button><button onClick={()=>edit(article)} title="تعديل" className="p-2 text-rust rounded-lg hover:bg-gold/20"><Edit3 size={17}/></button><button onClick={()=>setConfirmDeleteId(article.id)} title="حذف" className="p-2 text-red-700 rounded-lg hover:bg-red-50"><Trash2 size={17}/></button></div></div>{confirmDeleteId===article.id&&<div className="mt-3 pt-3 border-t border-red-200 bg-red-50 rounded-xl p-3 text-sm"><p className="text-red-800 font-bold">حذف هذه المقالة نهائيًا؟</p><div className="flex gap-2 mt-2"><button disabled={busy} onClick={()=>handleDelete(article.id)} className="bg-red-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold">نعم، حذف</button><button onClick={()=>setConfirmDeleteId(null)} className="bg-white border rounded-lg px-3 py-1.5 text-xs">إلغاء</button></div></div>}</div>)}{!filtered.length&&<p className="text-center p-8 text-ink/60"><BookOpen className="mx-auto mb-3 text-gold"/>لا توجد منشورات في هذا التصنيف.</p>}</div></section>
+      <section className="lg:col-span-5 bg-white rounded-3xl border border-gold/40 p-6 shadow-soft" aria-labelledby="manage-title"><label className="block mb-5">ابحث في المنشورات<input value={articleSearch} onChange={e=>setArticleSearch(e.target.value)} className="block w-full p-3 mt-2 rounded-xl border border-gold/40" placeholder="العنوان أو الكاتب"/></label><div className="flex flex-wrap justify-between gap-2 items-center mb-5"><h2 id="manage-title" className="font-literature text-2xl font-bold">إدارة المنشورات ({articles.length})</h2><div className="flex gap-1 bg-cream p-1 rounded-xl">{[['all','الكل'],['published','منشور'],['draft','مسودات'],['scheduled','مجدول']].map(([id,title])=><button key={id} onClick={()=>setFilter(id)} className={`text-xs font-bold rounded-lg px-2.5 py-1.5 ${filter===id?'bg-teal text-white':''}`}>{title}</button>)}</div></div><div className="space-y-3 max-h-[750px] overflow-y-auto">{filtered.map(article=><div key={article.id} className={`rounded-2xl p-4 border ${editingId===article.id?'border-teal bg-teal/5':'border-gold/30 bg-cream/50'}`}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs text-rust font-bold">{getCategory(article.category).title} · {publicationLabel(article)}{article.featured?' · مميزة':''}</p><h3 className="font-literature font-bold text-lg line-clamp-2 mt-1">{article.title}</h3><p className="text-xs text-ink/55 mt-1">{isScheduled(article)?new Date(article.scheduledAt).toLocaleString('ar-YE'):article.publishDate} · {article.readTime}</p></div><div className="flex gap-1 shrink-0"><Link to={articlePath(article)} title="معاينة" className="p-2 text-teal rounded-lg hover:bg-teal/10"><Eye size={17}/></Link><button type="button" disabled={article.status!=='published'||isScheduled(article)} onClick={async()=>{const url=publicationUrl(article);try{await navigator.clipboard.writeText(url);setSuccess('نُسخ رابط المقالة: '+url);}catch{setError('تعذر نسخ الرابط.');}}} title="نسخ الرابط المختصر" className="p-2 text-teal rounded-lg hover:bg-teal/10"><Copy size={17}/></button><button onClick={()=>edit(article)} title="تعديل" className="p-2 text-rust rounded-lg hover:bg-gold/20"><Edit3 size={17}/></button><button onClick={()=>setConfirmDeleteId(article.id)} title="حذف" className="p-2 text-red-700 rounded-lg hover:bg-red-50"><Trash2 size={17}/></button></div></div>{confirmDeleteId===article.id&&<div className="mt-3 pt-3 border-t border-red-200 bg-red-50 rounded-xl p-3 text-sm"><p className="text-red-800 font-bold">حذف هذه المقالة نهائيًا؟</p><div className="flex gap-2 mt-2"><button disabled={busy} onClick={()=>handleDelete(article.id)} className="bg-red-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold">نعم، حذف</button><button onClick={()=>setConfirmDeleteId(null)} className="bg-white border rounded-lg px-3 py-1.5 text-xs">إلغاء</button></div></div>}</div>)}{!filtered.length&&<p className="text-center p-8 text-ink/60"><BookOpen className="mx-auto mb-3 text-gold"/>لا توجد منشورات في هذا التصنيف.</p>}</div></section>
     </div>
   </div>;
 }

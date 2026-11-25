@@ -8,7 +8,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -41,10 +42,20 @@ import com.moataz.motazalqmi.data.*
 @Composable internal fun MagazineSection(id: String, library: Library, settings: ReadingSettings,
     section: (String) -> Unit, open: (String) -> Unit, save: (String) -> Unit) {
     val info = library.sections.firstOrNull { it.id == id }
-    val articles = library.articles.filter { it.id in library.available && it.category == id }
+    var topic by rememberSaveable(id) { mutableStateOf("") }
+    val articles = library.articles.filter { it.id in library.available && it.category == id && (topic.isEmpty() || topic in it.tags) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { PageBanner(info?.title ?: "القسم غير موجود", info?.subtitle.orEmpty(), sectionIcon(id), "${articles.size} مادة منشورة") }
         item { SectionDoors(library.sections, id, section) }
+        if (id == HEALTH_SECTION) {
+            item { HealthNotice() }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { FilterChip(topic.isEmpty(), { topic = "" }, { Text("جميع المقالات") }) }
+                    items(HealthTopics) { name -> FilterChip(topic == name, { topic = name }, { Text(name) }) }
+                }
+            }
+        }
         if (id == "quotes") items(library.quotes, key = { quoteId(it) }) { quote ->
             val key = quoteId(quote)
             QuoteCard(quote, library.states[key]?.saved == true, { save(key) })
@@ -84,7 +95,8 @@ import com.moataz.motazalqmi.data.*
     val pillars = listOf(
         Triple(R.drawable.blog_landmark, "أصالة التراث العربي", "استكشاف روائع الشعر وكتب البيان وسير الأدباء والحكماء."),
         Triple(R.drawable.blog_feather, "إبداع القلم والفكر", "مقالات وتأملات في قضايا الإنسان والثقافة."),
-        Triple(R.drawable.blog_book_open, "صحبة الكتاب", "قراءات ومراجعات من بطون الكتب القديمة والحديثة.")
+        Triple(R.drawable.blog_book_open, "صحبة الكتاب", "قراءات ومراجعات من بطون الكتب القديمة والحديثة."),
+        Triple(R.drawable.blog_health, "الصحة والدواء", "أدلة توعوية بمراجع منشورة عن سلامة الدواء وأسئلة الصيدلي.")
     )
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { PageBanner("حول مدونة معتز العلقمي", library.tagline, R.drawable.blog_user_check) }

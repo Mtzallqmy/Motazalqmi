@@ -1,10 +1,12 @@
+import { HEALTH_SECTION_ID } from './healthDesk.js';
+
 // Public, versioned editorial metadata shared with the native Android client.
 // This module contains no secrets and is independent from the React website.
 export const SITE = Object.freeze({
   id: 'motazalqmi',
   name: 'مدونة معتز العلقمي',
   tagline: 'حيث تلتقي الكلمة بالفكر، ويزهر الأدب',
-  description: 'مدونة أدبية وإنسانية وثقافية ودينية ولغوية، تنشر مقالات وقراءات وتأملات بالعربية.',
+  description: 'مدونة عربية للأدب والثقافة والإنسان والدين واللغة، تضم دليلًا توعويًا للصحة والدواء.',
   owner: 'معتز العلقمي',
   credit: 'برمجة وتطوير معتز العلقمي – تعز – اليمن – 2026م',
   officialUrl: 'https://motazalqmi.vercel.app',
@@ -24,8 +26,13 @@ export const SECTIONS = Object.freeze([
   {id:'culture',title:'ثقافة وفكر',subtitle:'قراءات في الأفكار والتاريخ والفنون وما يثري الحوار'},
   {id:'faith',title:'دين وقيم',subtitle:'تأملات إيمانية وقراءات في السيرة والأخلاق والقيم'},
   {id:'language',title:'لغتنا العربية',subtitle:'البيان والبلاغة والنحو واستعمال العربية في الكتابة والحياة'},
+  {id:HEALTH_SECTION_ID,title:'الصحة والدواء',subtitle:'توعية طبية وصيدلانية بالعربية لفهم الأدوية واستخدامها بأمان'},
   {id:'about',title:'حول المدونة',subtitle:'تعريف برسالة المدونة وصاحبها وأهدافها الثقافية'}
 ]);
+export function categoryId(value) {
+  if (value === 'الرئيسي' || value === 'الرئيسية') return 'general';
+  return SECTIONS.find(section => section.id !== 'about' && (section.id === value || section.title === value))?.id || value || 'general';
+}
 export const QUOTES = Object.freeze([
   {text:'إنَّ الكلامَ لفي الفؤادِ وإنَّما ... جُعِلَ اللسانُ على الفؤادِ دليلا',author:'يُنسب إلى الأخطل التغلبي',source:'من الشعر العربي'},
   {text:'خيرُ جليسٍ في الزمانِ كتابُ ... تَلهو بهِ إنْ خانَكَ الأصحابُ',author:'أبو الطيب المتنبي',source:'الديوان'},

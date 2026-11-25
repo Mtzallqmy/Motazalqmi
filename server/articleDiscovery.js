@@ -1,5 +1,6 @@
 import { database, articleRow } from './db.js';
 import { publicGet, publicError } from './publicApi.js';
+import { validShortCode } from './articleLinks.js';
 
 const origin = 'https://motazalqmi.vercel.app';
 const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -24,15 +25,25 @@ ${image ? '<meta property="og:image" content="'+escape(image)+'">' : ''}<meta na
 <script type="module" src="/article-entry.js"></script></head><body><div id="root"><article><h1>${title}</h1>
 <p>${escape(article.author)}</p><p>${summary}</p></article></div></body></html>`;
 }
-export async function discovery(req,res,resource) {
+export async function discovery(req,res,resource,sqlFactory=database) {
   if (!publicGet(req,res)) return;
   try {
-    const sql = database();
+    const sql = sqlFactory();
+    if (resource === 'short-link') {
+      res.setHeader('Cache-Control', 'no-store');
+      const code = req.query?.code;
+      if (!validShortCode(code)) return res.status(404).send('المقالة غير متاحة');
+      const [article] = await sql`SELECT slug FROM blog_published_articles WHERE status='published'
+        AND substr(md5(id), 1, 16)=${code} LIMIT 1`;
+      if (!article) return res.status(404).send('المقالة غير متاحة');
+      res.setHeader('Location', articleUrl(article.slug));
+      return res.status(302).end();
+    }
     if (resource === 'sitemap') {
       const rows = await sql`SELECT slug,updated_at::text FROM blog_published_articles WHERE status='published' ORDER BY id`;
       res.setHeader('Content-Type','application/xml; charset=utf-8');
       res.setHeader('Cache-Control','public,max-age=0,s-maxage=60');
-      const urls = ['<url><loc>'+origin+'/</loc></url>', ...rows.map(r => '<url><loc>'+escape(articleUrl(r.slug))+'</loc><lastmod>'+new Date(r.updated_at).toISOString()+'</lastmod></url>')];
+      const urls = ['<url><loc>'+origin+'/</loc></url>', '<url><loc>'+origin+'/category/health</loc></url>', ...rows.map(r => '<url><loc>'+escape(articleUrl(r.slug))+'</loc><lastmod>'+new Date(r.updated_at).toISOString()+'</lastmod></url>')];
       return res.status(200).send(req.method==='HEAD'?'':'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+urls.join('')+'</urlset>');
     }
     const slug = req.query?.slug;

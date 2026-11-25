@@ -73,7 +73,7 @@ private val tabs = listOf("home" to "الرئيسية", "search" to "البحث"
  LaunchedEffect(notice) { if (notice.isNotBlank()) { snackbar.showSnackbar(notice); vm.notice.value = "" } }
  var handled by rememberSaveable { mutableStateOf(false) }
  LaunchedEffect(library.articles, deepSlug) {
-  if (!handled && deepSlug != null) library.articles.find { it.slug == deepSlug }?.let {
+  if (!handled && deepSlug != null) library.articles.find { it.id in library.available && (it.slug == deepSlug || "r/"+articleShortCode(it.id) == deepSlug) }?.let {
    handled = true; nav.navigate("article/${Uri.encode(it.id)}")
   }
  }
@@ -274,7 +274,7 @@ internal fun share(context: android.content.Context, text: String) {
     if (headings.isNotEmpty()) IconButton(onClick = { showIndex = true }) { MagazineIcon(R.drawable.blog_list, "فهرس المقالة") }
     IconButton(onClick = { showSettings = true }) { MagazineIcon(R.drawable.blog_sliders_horizontal, "إعدادات القراءة") }
     IconButton(onClick = { vm.save(a.id) }) { Icon(if (state?.saved == true) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "حفظ للقراءة لاحقًا") }
-    IconButton(onClick = { share(context, a.title + "\nhttps://motazalqmi.vercel.app/articles/" + Uri.encode(a.slug)) }) { MagazineIcon(R.drawable.blog_share2, "مشاركة المقال") }
+    IconButton(onClick = { share(context, a.title + "\n" + articleShareUrl(a.id)) }) { MagazineIcon(R.drawable.blog_share2, "مشاركة المقال") }
    })
   }
   LinearProgressIndicator(progress = { if (scroll.maxValue > 0 && scroll.maxValue < Int.MAX_VALUE) scroll.value.toFloat() / scroll.maxValue else 0f }, modifier = Modifier.fillMaxWidth())
@@ -300,6 +300,7 @@ internal fun share(context: android.content.Context, text: String) {
    if (a.excerpt.isNotBlank()) Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
     Text(a.excerpt, Modifier.padding(16.dp), fontFamily = Naskh, fontSize = 21.sp, lineHeight = 36.sp)
    }
+   if (a.category == HEALTH_SECTION && HEALTH_NOTICE !in a.content) HealthNotice()
    if (!focus) ArticleActionsRow(a)
    Spacer(Modifier.height(14.dp))
    if (rendered == null) CircularProgressIndicator()

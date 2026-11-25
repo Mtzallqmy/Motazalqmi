@@ -1,0 +1,91 @@
+name: Verify and publish owner-signed APK
+on:
+  push:
+    branches: ['release/signed-3.6.0']
+    paths: ['.release-payload/**']
+permissions:
+  contents: read
+concurrency:
+  group: edition-36-public-release
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      source: ${{ steps.verify.outputs.source }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 2, persist-credentials: false}
+      - name: Verify the signed distribution
+        id: verify
+        run: |
+          set -euo pipefail
+          source=$(git rev-parse HEAD^)
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$source" origin/main
+          if git diff --name-only "$source" HEAD | grep -qv '^.release-payload/'; then exit 1; fi
+          mkdir -p dist
+          sdk="$ANDROID_HOME/build-tools/35.0.0"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+          apk=dist/Motazalqmi-3.6.0-ARM64.apk
+          cat .release-payload/part-* > "$apk"
+          "$sdk/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$apk" > dist/signature.txt
+          fingerprint=$(awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}' dist/signature.txt)
+          test "$fingerprint" = "$(cat android/release/edition35-certificate.sha256)"
+          "$sdk/zipalign" -c 4 "$apk"
+          "$sdk/aapt" dump badging "$apk" > badging.txt
+          grep -F "package: name='com.moataz.motazalqmi.edition35' versionCode='30600' versionName='3.6.0'" badging.txt
+          grep -Fx "sdkVersion:'26'" badging.txt
+          grep -Fx "native-code: 'arm64-v8a'" badging.txt
+          grep -Fx "application-label:'معتز العلقمي'" badging.txt
+          unzip -tq "$apk"
+          printf '%s\n' com.moataz.motazalqmi.edition35 > dist/package.txt
+          (cd dist && sha256sum *.apk > SHA256SUMS)
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+      - name: Download previous release
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: gh release download v3.5.0-preview.1 -p '*.apk' -D "$RUNNER_TEMP/previous"
+      - run: sudo chmod a+rw /dev/kvm
+      - name: Verify an in-place upgrade and offline launch
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install "$RUNNER_TEMP"/previous/*.apk
+            adb shell svc wifi disable
+            adb shell svc data disable
+            adb shell am start -W -n com.moataz.motazalqmi.edition35/com.moataz.motazalqmi.MainActivity
+            adb install -r dist/*.apk
+            adb shell am start -W -n com.moataz.motazalqmi.edition35/com.moataz.motazalqmi.MainActivity | tee /tmp/launch
+            grep -F 'Status: ok' /tmp/launch
+            sleep 5
+            adb shell pidof com.moataz.motazalqmi.edition35
+            adb shell dumpsys package com.moataz.motazalqmi.edition35 | grep -F 'versionCode=30600'
+            adb exec-out screencap -p > upgraded-home.png
+      - uses: actions/upload-artifact@v4
+        with: {name: verified-owner-apk, path: dist/, if-no-files-found: error}
+      - uses: actions/upload-artifact@v4
+        with: {name: upgraded-native-home, path: upgraded-home.png}
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: verified-owner-apk, path: dist}
+      - name: Publish the verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.verify.outputs.source }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c SHA256SUMS
+          tag=v3.6.0-preview.1
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
+          printf '%s\n' 'تحديث ٣.٦.٠ بالتوقيع نفسه لنسخة ٣.٥.٠. قسم الصحة والدواء مع مقالات موثقة، وروابط مختصرة ثابتة، وتحسينات تجربة الكاتب والتزامن.' 'Android 8+ / ARM64.' > RELEASE-NOTES.md
+          gh release create "$tag" Motazalqmi-3.6.0-ARM64.apk SHA256SUMS signature.txt package.txt -R "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --prerelease --title 'معتز العلقمي 3.6.0' --notes-file RELEASE-NOTES.md

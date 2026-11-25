@@ -1,7 +1,9 @@
 import {publicationTime,isScheduled} from '../shared/publication.js';
 import {telegramAttachment,storeTelegramMedia} from './telegramMedia.js';
 import {randomUUID,timingSafeEqual,createHash,createHmac} from 'node:crypto';
-import {database,normalizeArticle} from './db.js';
+import {articleRow,database,normalizeArticle} from './db.js';
+import {shortArticleUrl,shortCode,validShortCode} from './articleLinks.js';
+import {SECTIONS,categoryId} from '../shared/publicContent.js';
 import {noCache} from './auth.js';
 
 const SITE='https://motazalqmi.vercel.app';
@@ -34,13 +36,14 @@ const HELP=[
  '/drafts — المسودات',
  '/stats — إحصاء المنشورات',
  '/show slug — تفاصيل المقالة',
- '/link slug — رابط المقالة',
+ '/link slug — الرابط المختصر للمقالة المنشورة',
  '/new العنوان | المحتوى — إنشاء مسودة',
  '/title slug | العنوان الجديد',
  '/text slug | النص الجديد (Markdown)',
  '/excerpt slug | الملخص',
  '/cover slug | رابط صورة HTTPS',
  '/category slug | القسم',
+ '/categories — أسماء الأقسام',
  '/featured slug — تمييز/إلغاء تمييز',
  '/publish slug — نشر',
  '/unpublish slug — تحويل لمسودة',
@@ -53,7 +56,11 @@ const HELP=[
  '/tagline النص — تغيير وصف المدونة',
  '/help — هذه الأوامر'
 ].join('\n');
-const rowArticle=r=>({...r.data,id:r.id,slug:r.slug,status:r.status,publishDate:r.publish_date,updatedAt:r.updated_at});
+const rowArticle=articleRow;
+const isPublic = article => article.status==='published' && !isScheduled(article);
+function publicButtons(article) {
+ return isPublic(article)?[[{text:'اقرأ المقالة',url:shortArticleUrl(article.id)}]]:undefined;
+}
 const errorText=e=>/^(الصيغة|اكتب|القيمة|رابط|معرف|بيانات|موعد|تغيرت|الملف|لا توجد|هذه المقالة)/.test(e?.message||'')?e.message:'تحقق من محتوى الأمر أو أعد المحاولة.';
 
 export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch,download=globalThis.fetch,uploadMedia,env=process.env}={}){
@@ -98,7 +105,10 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
    authorized=true;
    const lookup=async slug=>{
     if(!slug||slug.length>150)throw Error('اكتب رابطًا وصفيًا صحيحًا.');
-    const rows=await sql.query('SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles WHERE slug=$1 LIMIT 1',[slug]);
+    const code=slug.replace(/^https:\/\/motazalqmi\.vercel\.app\/r\//,'');
+    const rows=validShortCode(code)
+      ?await sql.query('SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles WHERE substr(md5(id),1,16)=$1 LIMIT 1',[code])
+      :await sql.query('SELECT id,slug,status,publish_date::text,updated_at::text,data FROM blog_articles WHERE slug=$1 LIMIT 1',[slug]);
     if(!rows.length)throw Error('لا توجد مقالة بهذا الرابط الوصفي.');
     return rowArticle(rows[0]);
    };
@@ -121,9 +131,14 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
      ['telegram_setting:'+actorId,JSON.stringify({nonce,field,value,expiresAt:Date.now()+600000})]);
     await reply('تأكيد تغيير '+(field==='about'?'نبذة المدونة':'عبارة المدونة')+'؟\n'+value.slice(0,400),[[{text:'تأكيد التغيير',callback_data:'setting:'+nonce},{text:'إلغاء',callback_data:'cancel'}]]);
    };
-   const done=async a=>reply((isScheduled(a)?'🕒 مجدول: ':a.status==='published'?'✅ منشور: ':'📝 مسودة: ')+a.title+'\n'+articleLink(a.slug));
+   const done=async a=>reply((isScheduled(a)?'🕒 مجدول: ':a.status==='published'?'✅ منشور: ':'📝 مسودة: ')+a.title+
+    (isPublic(a)?'\nالرابط المختصر: '+shortArticleUrl(a.id):'\nمعرّف التحرير: '+a.slug),publicButtons(a));
    if(cb){
     await call('answerCallbackQuery',{callback_query_id:cb.id});
+    if(typeof cb.data==='string'&&cb.data.startsWith('delete-cancel:')){
+     await sql.query("DELETE FROM blog_public_metadata WHERE id=$1 AND data->>'nonce'=$2",['telegram_delete:'+actorId,cb.data.slice(14)]);
+     await reply('أُلغيت العملية.');return res.status(200).json({ok:true});
+    }
     if(cb.data==='cancel'){await reply('أُلغيت العملية.');return res.status(200).json({ok:true});}
     if(typeof cb.data==='string'&&cb.data.startsWith('setting:')){
      const rows=await sql.query("DELETE FROM blog_public_metadata WHERE id=$1 AND data->>'nonce'=$2 AND (data->>'expiresAt')::bigint>$3::bigint RETURNING data",['telegram_setting:'+actorId,cb.data.slice(8),String(Date.now())]);
@@ -143,22 +158,28 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
      await reply('✅ حُذف الاقتباس من المدونة.');
      return res.status(200).json({ok:true});
     }
-    const id=typeof cb.data==='string'&&cb.data.startsWith('del:')?cb.data.slice(4):'';
-    if(!id||id.length>100)return res.status(200).json({ok:true});
-    const rows=await sql.query('DELETE FROM blog_articles WHERE id=$1 RETURNING slug',[id]);
-    await reply(rows.length?'حُذفت المقالة: '+rows[0].slug:'المقالة غير موجودة.');
+    const nonce=typeof cb.data==='string'&&cb.data.startsWith('delete:')?cb.data.slice(7):'';
+    if(!/^[a-f0-9]{20}$/.test(nonce))return res.status(200).json({ok:true});
+    const rows=await sql.query(`WITH confirmation AS (
+      DELETE FROM blog_public_metadata WHERE id=$1 AND data->>'nonce'=$2
+        AND (data->>'expiresAt')::bigint>$3::bigint RETURNING data
+    ) DELETE FROM blog_articles AS a USING confirmation AS c
+      WHERE a.id=c.data->>'articleId' AND a.updated_at=(c.data->>'version')::timestamptz RETURNING a.slug`,
+      ['telegram_delete:'+actorId,nonce,String(Date.now())]);
+    await reply(rows.length?'حُذفت المقالة: '+rows[0].slug:'انتهى التأكيد أو تغيّرت المقالة. أعد طلب الحذف.');
     return res.status(200).json({ok:true});
    }
    const cmd=telegramCommand(msg?.text||msg?.caption);
    if(!cmd)return res.status(200).json({ok:true});
-   if(['help','start'].includes(cmd.name))await reply(HELP);
+   if(['help','start'].includes(cmd.name))await reply(HELP,[[{text:'الموقع',url:SITE},{text:'الصحة والدواء',url:SITE+'/category/health'}],[{text:'لوحة الكاتب',url:SITE+'/admin'}]]);
+   else if(cmd.name==='categories')await reply(SECTIONS.filter(s=>s.id!=='about').map(s=>s.title+' — '+s.id).join('\n'));
    else if(cmd.name==='stats'){
     const rows=await sql.query("SELECT CASE WHEN status='published' AND NOT blog_is_due(data) THEN 'scheduled' ELSE status END AS status,COUNT(*)::int AS amount FROM blog_articles GROUP BY 1",[]);
     await reply('📊 الإحصاءات\nالمنشور: '+(rows.find(x=>x.status==='published')?.amount||0)+'\nالمسودات: '+(rows.find(x=>x.status==='draft')?.amount||0)+'\nالمجدول: '+(rows.find(x=>x.status==='scheduled')?.amount||0));
    }else if(['articles','drafts','scheduled'].includes(cmd.name)){
     const status=cmd.name==='drafts'?'draft':'published';
-    const rows=await sql.query('SELECT slug,data FROM blog_articles WHERE status=$1 AND ($2=\'drafts\' OR ($2=\'scheduled\' AND NOT blog_is_due(data)) OR ($2=\'articles\' AND blog_is_due(data))) ORDER BY updated_at DESC LIMIT 20',[status,cmd.name]);
-    await reply((status==='draft'?'📝 المسودات':'📰 المقالات')+'\n'+(rows.length?rows.map((r,i)=>(i+1)+'. '+r.data.title+'\n/show '+r.slug).join('\n\n'):'لا توجد مقالات'));
+    const rows=await sql.query('SELECT id,slug,data,status FROM blog_articles WHERE status=$1 AND ($2=\'drafts\' OR ($2=\'scheduled\' AND NOT blog_is_due(data)) OR ($2=\'articles\' AND blog_is_due(data))) ORDER BY updated_at DESC LIMIT 20',[status,cmd.name]);
+    await reply((status==='draft'?'📝 المسودات':'📰 المقالات')+'\n'+(rows.length?rows.map((r,i)=>(i+1)+'. '+r.data.title+'\n/show '+shortCode(r.id)+(cmd.name==='articles'?'\n'+shortArticleUrl(r.id):'')).join('\n\n'):'لا توجد مقالات'));
    }else if(cmd.name==='search'){
     if(!cmd.args||cmd.args.length>150)throw Error('اكتب كلمات البحث بعد /search');
     const rows=await sql.query("SELECT slug,data->>'title' AS title,status FROM blog_articles WHERE strpos(lower(data->>'title'),lower($1))>0 ORDER BY updated_at DESC LIMIT 12",[cmd.args]);
@@ -199,7 +220,8 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
     await reply(rows.length?rows.map(r=>r.data.at+' · /'+r.data.command+' · '+r.data.code).join('\n'):'لا توجد عمليات فاشلة مسجلة.');
    }else if(['show','link'].includes(cmd.name)){
     const a=await lookup(cmd.args);
-    await reply((cmd.name==='show'?a.title+'\nالحالة: '+(isScheduled(a)?'مجدول إلى '+a.scheduledAt:a.status)+'\nالقسم: '+a.category+'\n'+a.content.slice(0,1800)+'\n':'')+articleLink(a.slug));
+    const link=isPublic(a)?shortArticleUrl(a.id):'يظهر الرابط العام بعد النشر.';
+    await reply((cmd.name==='show'?a.title+'\nالحالة: '+(isScheduled(a)?'مجدول إلى '+a.scheduledAt:a.status)+'\nالقسم: '+(SECTIONS.find(s=>s.id===a.category)?.title||a.category)+'\n'+a.content.slice(0,1800)+'\n':'')+link,publicButtons(a));
    }else if(['publish','unpublish','featured'].includes(cmd.name)){
     const a=await lookup(cmd.args);
     await done(await update(a,cmd.name==='featured'?{featured:!a.featured}:{status:cmd.name==='publish'?'published':'draft',scheduledAt:''}));
@@ -211,11 +233,15 @@ export function createTelegramHandler({sqlFactory=database,send=globalThis.fetch
     if(cmd.name==='cover'&&!/^https:\/\//i.test(value))throw Error('رابط الصورة يجب أن يبدأ بـ HTTPS.');
     const a=await lookup(slug);
     const field={title:'title',text:'content',excerpt:'excerpt',cover:'coverImage',category:'category',author:'author'}[cmd.name];
-    await done(await update(a,{[field]:value,...(field==='author'?{authorId:'',authorImage:''}:{})}));
+    const category=field==='category'?categoryId(value):null;
+    if(category&&!SECTIONS.some(s=>s.id===category&&s.id!=='about'))throw Error('القيمة غير صالحة. استخدم /categories.');
+    await done(await update(a,{[field]:category||value,...(field==='author'?{authorId:'',authorImage:''}:{})}));
    }else if(cmd.name==='delete'){
     const a=await lookup(cmd.args);
-    if(a.id.length>55)throw Error('معرف المقالة طويل؛ احذفها من الموقع.');
-    await reply('⚠️ حذف «'+a.title+'» نهائيًا؟',[[{text:'تأكيد الحذف',callback_data:'del:'+a.id},{text:'إلغاء',callback_data:'cancel'}]]);
+    const nonce=randomUUID().replaceAll('-','').slice(0,20);
+    await sql.query('INSERT INTO blog_public_metadata(id,data) VALUES($1,$2::jsonb) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()',
+      ['telegram_delete:'+actorId,JSON.stringify({nonce,articleId:a.id,version:a.updatedAt,expiresAt:Date.now()+600000})]);
+    await reply('⚠️ حذف «'+a.title+'» نهائيًا؟',[[{text:'تأكيد الحذف',callback_data:'delete:'+nonce},{text:'إلغاء',callback_data:'delete-cancel:'+nonce}]]);
    }else if(cmd.name==='site'){
     const data=await getEditorial();
     await reply('🏛 '+(data.site?.name||'مدونة معتز العلقمي')+'\n'+(data.site?.tagline||'')+'\n'+SITE);

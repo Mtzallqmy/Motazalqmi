@@ -7,6 +7,7 @@ export function LoginPage() {
   const { login, user, isAdmin, loading, logout } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword,setShowPassword]=useState(false);
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -29,7 +30,7 @@ export function LoginPage() {
       </div>
       <form onSubmit={submit} className="p-7 sm:p-9 space-y-5">
         <label className="block text-sm font-bold"><span className="flex gap-2 items-center mb-2"><Mail size={16} className="text-gold"/> البريد الإلكتروني</span><input type="email" required autoComplete="username" dir="ltr" value={email} onChange={e=>setEmail(e.target.value)} placeholder="author@example.com" className="w-full rounded-xl border border-gold/40 px-4 py-3 outline-offset-2 bg-cream text-left"/></label>
-        <label className="block text-sm font-bold"><span className="flex gap-2 items-center mb-2"><LockKeyhole size={16} className="text-gold"/> كلمة المرور</span><input type="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full rounded-xl border border-gold/40 px-4 py-3 bg-cream text-left" dir="ltr"/></label>
+        <label className="block text-sm font-bold"><span className="flex gap-2 items-center mb-2"><LockKeyhole size={16} className="text-gold"/> كلمة المرور</span><input type={showPassword?'text':'password'} required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full rounded-xl border border-gold/40 px-4 py-3 bg-cream text-left" dir="ltr"/><button type="button" className="text-teal py-2 text-xs" onClick={()=>setShowPassword(v=>!v)} aria-pressed={showPassword}>{showPassword?'إخفاء كلمة المرور':'إظهار كلمة المرور'}</button></label>
         <label className="flex items-center gap-3 text-sm text-ink font-bold"><input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)} className="w-5 h-5 accent-[#0D5C63]"/> تذكّر دخولي على هذا الجهاز لمدة 30 يومًا</label>
         {error && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 text-red-800 p-3 text-sm">{error}</p>}
         <button type="submit" disabled={busy || loading} className="w-full rounded-xl bg-teal text-white px-5 py-3 font-bold flex justify-center gap-2 items-center"><LogIn size={18}/>{busy || loading ? 'جار التحقق…' : 'دخول لوحة الكاتب'}</button>

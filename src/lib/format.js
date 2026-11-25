@@ -4,3 +4,5 @@ export const formatDate = date => date ? new Intl.DateTimeFormat('ar', { dateSty
 export const slugify = text => (text || '').trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 120) || `article-${Date.now()}`;
 export const articlePath = article => `/articles/${encodeURIComponent(article.slug || article.id)}`;
 export const nextId = () => `art-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
+
+export const publicationUrl = article => window.location.origin + (/^[0-9a-f]{16}$/.test(article.shortCode || '') ? '/r/'+article.shortCode : articlePath(article));
