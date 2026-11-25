@@ -64,6 +64,6 @@ export function ArticlesProvider({children}){
  };
  const visibleArticles=loadedScope===scope?articles:[];
  const published=useMemo(()=>visibleArticles.filter(a=>a.status==='published'&&!isScheduled(a)),[visibleArticles]);
- return <Context.Provider value={{articles:visibleArticles,published,quotes,site,ticker,saveTicker,loading,error,isDemo,save,remove,importExamples,saveEditorial}}>{children}</Context.Provider>;
+ return <Context.Provider value={{articles:visibleArticles,published,quotes,site,ticker:loadedScope===scope?ticker:DEFAULT_TICKER,saveTicker,loading,error,isDemo,save,remove,importExamples,saveEditorial}}>{children}</Context.Provider>;
 }
 export const useArticles=()=>useContext(Context);

@@ -33,7 +33,8 @@ try {
  assert.equal(await page.getByRole('navigation',{name:'الأبواب الرئيسية'}).getByRole('link').count(),6);
  await page.screenshot({path:'mobile-home.png',animations:'disabled'});
  await page.getByRole('link',{name:'تصفّح القسم'}).click();
- await page.getByRole('heading',{name:'الصحة والدواء',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'الصحة والدواء',exact:true,level:1}).waitFor();
+ await page.locator('.health-articles article').first().waitFor();
  assert.equal(await page.locator('.health-articles article').count(),3);
  await page.getByRole('link',{name:/سلامة الدواء/}).click();
  await page.waitForURL('**/category/health?topic=safety');
