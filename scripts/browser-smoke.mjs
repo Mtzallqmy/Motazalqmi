@@ -38,8 +38,12 @@ try {
  assert.equal(await page.locator('.health-articles article').count(),3);
  await page.getByRole('link',{name:/سلامة الدواء/}).click();
  await page.waitForURL('**/category/health?topic=safety');
+ await page.getByRole('heading',{name:'سلامة الدواء',exact:true,level:2}).waitFor();
+ await page.waitForFunction(()=>document.querySelectorAll('.health-articles article').length===1);
  assert.equal(await page.locator('.health-articles article').count(),1);
  await page.getByRole('link',{name:'عرض كل المقالات'}).click();
+ await page.getByRole('heading',{name:'المقالات التوعوية',exact:true,level:2}).waitFor();
+ await page.waitForFunction(()=>document.querySelectorAll('.health-articles article').length===3);
  await page.getByRole('link',{name:'قراءة كيف تقرأ ملصق الدواء؟'}).click();
  await page.getByText('المصادر',{exact:true}).waitFor();
  await page.goto('http://localhost:4173');
